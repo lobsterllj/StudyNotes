@@ -555,7 +555,955 @@ public class ArrayList<E> extends AbstractList<E>
 
 ```
 
+#### 分析 ArrayList 扩容机制
 
+#### 先从 ArrayList 的构造函数说起
+
+**（JDK8）ArrayList 有三种方式来初始化，构造方法源码如下：**
+
+```java
+   /**
+     * 默认初始容量大小
+     */
+    private static final int DEFAULT_CAPACITY = 10;
+
+
+    private static final Object[] DEFAULTCAPACITY_EMPTY_ELEMENTDATA = {};
+
+    /**
+     *默认构造函数，使用初始容量10构造一个空列表(无参数构造)
+     */
+    public ArrayList() {
+        this.elementData = DEFAULTCAPACITY_EMPTY_ELEMENTDATA;
+    }
+
+    /**
+     * 带初始容量参数的构造函数。（用户自己指定容量）
+     */
+    public ArrayList(int initialCapacity) {
+        if (initialCapacity > 0) {//初始容量大于0
+            //创建initialCapacity大小的数组
+            this.elementData = new Object[initialCapacity];
+        } else if (initialCapacity == 0) {//初始容量等于0
+            //创建空数组
+            this.elementData = EMPTY_ELEMENTDATA;
+        } else {//初始容量小于0，抛出异常
+            throw new IllegalArgumentException("Illegal Capacity: "+
+                                               initialCapacity);
+        }
+    }
+
+
+   /**
+    *构造包含指定collection元素的列表，这些元素利用该集合的迭代器按顺序返回
+    *如果指定的集合为null，throws NullPointerException。
+    */
+     public ArrayList(Collection<? extends E> c) {
+        elementData = c.toArray();
+        if ((size = elementData.length) != 0) {
+            // c.toArray might (incorrectly) not return Object[] (see 6260652)
+            if (elementData.getClass() != Object[].class)
+                elementData = Arrays.copyOf(elementData, size, Object[].class);
+        } else {
+            // replace with empty array.
+            this.elementData = EMPTY_ELEMENTDATA;
+        }
+    }
+```
+
+细心的同学一定会发现 ：**以无参数构造方法创建 ArrayList 时，实际上初始化赋值的是一个空数组。当真正对数组进行添加元素操作时，才真正分配容量。即向数组中添加第一个元素时，数组容量扩为 10。** 下面在我们分析 ArrayList 扩容时会讲到这一点内容！
+
+> 补充：JDK7 new无参构造的ArrayList对象时，直接创建了长度是10的Object[]数组elementData 。jdk7中的ArrayList的对象的创建**类似于单例的饿汉式**，而jdk8中的ArrayList的对象的创建**类似于单例的懒汉式**。JDK8的内存优化也值得我们在平时开发中学习。
+
+####  一步一步分析 ArrayList 扩容机制
+
+这里以无参构造函数创建的 ArrayList 为例分析
+
+ 先来看 `add` 方法
+
+```
+    /**
+     * 将指定的元素追加到此列表的末尾。
+     */
+    public boolean add(E e) {
+   //添加元素之前，先调用ensureCapacityInternal方法
+        ensureCapacityInternal(size + 1);  // Increments modCount!!
+        //这里看到ArrayList添加元素的实质就相当于为数组赋值
+        elementData[size++] = e;
+        return true;
+    }
+```
+
+> **注意** ：JDK11 移除了 `ensureCapacityInternal()` 和 `ensureExplicitCapacity()` 方法
+
+再来看看 `ensureCapacityInternal()` 方法
+
+（JDK7）可以看到 `add` 方法 首先调用了`ensureCapacityInternal(size + 1)`
+
+```
+   //得到最小扩容量
+    private void ensureCapacityInternal(int minCapacity) {
+        if (elementData == DEFAULTCAPACITY_EMPTY_ELEMENTDATA) {
+              // 获取默认的容量和传入参数的较大值
+            minCapacity = Math.max(DEFAULT_CAPACITY, minCapacity);
+        }
+
+        ensureExplicitCapacity(minCapacity);
+    }
+```
+
+**当 要 add 进第 1 个元素时，minCapacity 为 1，在 Math.max()方法比较后，minCapacity 为 10。**
+
+> 此处和后续 JDK8 代码格式化略有不同，核心代码基本一样。
+
+ `ensureExplicitCapacity()` 方法
+
+如果调用 `ensureCapacityInternal()` 方法就一定会进入（执行）这个方法，下面我们来研究一下这个方法的源码！
+
+```
+  //判断是否需要扩容
+    private void ensureExplicitCapacity(int minCapacity) {
+        modCount++;
+
+        // overflow-conscious code
+        if (minCapacity - elementData.length > 0)
+            //调用grow方法进行扩容，调用此方法代表已经开始扩容了
+            grow(minCapacity);
+    }
+```
+
+我们来仔细分析一下：
+
+- 当我们要 add 进第 1 个元素到 ArrayList 时，elementData.length 为 0 （因为还是一个空的 list），因为执行了 `ensureCapacityInternal()` 方法 ，所以 minCapacity 此时为 10。此时，`minCapacity - elementData.length > 0`成立，所以会进入 `grow(minCapacity)` 方法。
+- 当 add 第 2 个元素时，minCapacity 为 2，此时 e lementData.length(容量)在添加第一个元素后扩容成 10 了。此时，`minCapacity - elementData.length > 0` 不成立，所以不会进入 （执行）`grow(minCapacity)` 方法。
+- 添加第 3、4···到第 10 个元素时，依然不会执行 grow 方法，数组容量都为 10。
+
+直到添加第 11 个元素，minCapacity(为 11)比 elementData.length（为 10）要大。进入 grow 方法进行扩容。
+
+`grow()` 方法
+
+```
+    /**
+     * 要分配的最大数组大小
+     */
+    private static final int MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8;
+
+    /**
+     * ArrayList扩容的核心方法。
+     */
+    private void grow(int minCapacity) {
+        // oldCapacity为旧容量，newCapacity为新容量
+        int oldCapacity = elementData.length;
+        //将oldCapacity 右移一位，其效果相当于oldCapacity /2，
+        //我们知道位运算的速度远远快于整除运算，整句运算式的结果就是将新容量更新为旧容量的1.5倍，
+        int newCapacity = oldCapacity + (oldCapacity >> 1);
+        //然后检查新容量是否大于最小需要容量，若还是小于最小需要容量，那么就把最小需要容量当作数组的新容量，
+        if (newCapacity - minCapacity < 0)
+            newCapacity = minCapacity;
+       // 如果新容量大于 MAX_ARRAY_SIZE,进入(执行) `hugeCapacity()` 方法来比较 minCapacity 和 MAX_ARRAY_SIZE，
+       //如果minCapacity大于最大容量，则新容量则为`Integer.MAX_VALUE`，否则，新容量大小则为 MAX_ARRAY_SIZE 即为 `Integer.MAX_VALUE - 8`。
+        if (newCapacity - MAX_ARRAY_SIZE > 0)
+            newCapacity = hugeCapacity(minCapacity);
+        // minCapacity is usually close to size, so this is a win:
+        elementData = Arrays.copyOf(elementData, newCapacity);
+    }
+```
+
+**int newCapacity = oldCapacity + (oldCapacity >> 1),所以 ArrayList 每次扩容之后容量都会变为原来的 1.5 倍左右（oldCapacity 为偶数就是 1.5 倍，否则是 1.5 倍左右）！** 奇偶不同，比如 ：10+10/2 = 15, 33+33/2=49。如果是奇数的话会丢掉小数.
+
+> ">>"（移位运算符）：>>1 右移一位相当于除 2，右移 n 位相当于除以 2 的 n 次方。这里 oldCapacity 明显右移了 1 位所以相当于 oldCapacity /2。对于大数据的 2 进制运算,位移运算符比那些普通运算符的运算要快很多,因为程序仅仅移动一下而已,不去计算,这样提高了效率,节省了资源
+
+**我们再来通过例子探究一下`grow()` 方法 ：**
+
+- 当 add 第 1 个元素时，oldCapacity 为 0，经比较后第一个 if 判断成立，newCapacity = minCapacity(为 10)。但是第二个 if 判断不会成立，即 newCapacity 不比 MAX_ARRAY_SIZE 大，则不会进入 `hugeCapacity` 方法。数组容量为 10，add 方法中 return true,size 增为 1。
+- 当 add 第 11 个元素进入 grow 方法时，newCapacity 为 15，比 minCapacity（为 11）大，第一个 if 判断不成立。新容量没有大于数组最大 size，不会进入 hugeCapacity 方法。数组容量扩为 15，add 方法中 return true,size 增为 11。
+- 以此类推······
+
+**这里补充一点比较重要，但是容易被忽视掉的知识点：**
+
+- java 中的 `length`属性是针对数组说的,比如说你声明了一个数组,想知道这个数组的长度则用到了 length 这个属性.
+- java 中的 `length()` 方法是针对字符串说的,如果想看这个字符串的长度则用到 `length()` 这个方法.
+- java 中的 `size()` 方法是针对泛型集合说的,如果想看这个泛型有多少个元素,就调用此方法来查看!
+
+`hugeCapacity()` 方法。
+
+从上面 `grow()` 方法源码我们知道： 如果新容量大于 MAX_ARRAY_SIZE,进入(执行) `hugeCapacity()` 方法来比较 minCapacity 和 MAX_ARRAY_SIZE，如果 minCapacity 大于最大容量，则新容量则为`Integer.MAX_VALUE`，否则，新容量大小则为 MAX_ARRAY_SIZE 即为 `Integer.MAX_VALUE - 8`。
+
+```
+    private static int hugeCapacity(int minCapacity) {
+        if (minCapacity < 0) // overflow
+            throw new OutOfMemoryError();
+        //对minCapacity和MAX_ARRAY_SIZE进行比较
+        //若minCapacity大，将Integer.MAX_VALUE作为新数组的大小
+        //若MAX_ARRAY_SIZE大，将MAX_ARRAY_SIZE作为新数组的大小
+        //MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8;
+        return (minCapacity > MAX_ARRAY_SIZE) ?
+            Integer.MAX_VALUE :
+            MAX_ARRAY_SIZE;
+    }
+```
+
+
+
+
+
+### HashMap
+
+HashMap 主要用来存放键值对，它基于哈希表的 Map 接口实现，是常用的 Java 集合之一。
+
+JDK1.8 之前 HashMap 由 数组+链表 组成的，数组是 HashMap 的主体，链表则是主要为了解决哈希冲突而存在的（“拉链法”解决冲突）。
+
+JDK1.8 之后 HashMap 的组成多了红黑树，在满足下面两个条件之后，会执行链表转红黑树操作，以此来加快搜索速度。
+
+- 链表长度大于阈值（默认为 8）
+- HashMap 数组长度超过 64
+
+#### 底层数据结构分析
+
+#### JDK1.8 之前
+
+JDK1.8 之前 HashMap 底层是 **数组和链表** 结合在一起使用也就是 **链表散列**。
+
+HashMap 通过 key 的 hashCode 经过扰动函数处理过后得到 hash 值，然后通过 `(n - 1) & hash` 判断当前元素存放的位置（这里的 n 指的是数组的长度），如果当前位置存在元素的话，就判断该元素与要存入的元素的 hash 值以及 key 是否相同，如果相同的话，直接覆盖，不相同就通过拉链法解决冲突。
+
+所谓扰动函数指的就是 HashMap 的 hash 方法。使用 hash 方法也就是扰动函数是为了防止一些实现比较差的 hashCode() 方法 换句话说使用扰动函数之后可以减少碰撞。
+
+#### **JDK 1.8 HashMap 的 hash 方法源码:**
+
+JDK 1.8 的 hash 方法 相比于 JDK 1.7 hash 方法更加简化，但是原理不变。
+
+```
+    static final int hash(Object key) {
+      int h;
+      // key.hashCode()：返回散列值也就是hashcode
+      // ^ ：按位异或
+      // >>>:无符号右移，忽略符号位，空位都以0补齐
+      return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
+  }
+```
+
+对比一下 JDK1.7 的 HashMap 的 hash 方法源码.
+
+```
+static int hash(int h) {
+    // This function ensures that hashCodes that differ only by
+    // constant multiples at each bit position have a bounded
+    // number of collisions (approximately 8 at default load factor).
+
+    h ^= (h >>> 20) ^ (h >>> 12);
+    return h ^ (h >>> 7) ^ (h >>> 4);
+}
+```
+
+相比于 JDK1.8 的 hash 方法 ，JDK 1.7 的 hash 方法的性能会稍差一点点，因为毕竟扰动了 4 次。
+
+#### HashMap中hash(Object key)的原理，为什么这样做?
+
+1. h >>> 16 是什么，有什么用?
+h是hashcode。h >>> 16是用来取出h的高16，(>>>是无符号右移)   如下展示：
+
+```java
+0000 0100 1011 0011  1101 1111 1110 0001
+
+>>> 16 
+
+0000 0000 0000 0000  0000 0100 1011 0011
+```
+
+
+2. 为什么 h = key.hashCode()) 与 (h >>> 16) 异或
+讲到这里还要看一个方法indexFor，在jdk1.7中有indexFor(int h, int length)方法。jdk1.8里没有，但原理没变。下面看下1.7源码
+
+1.8中用tab[(n - 1) & hash]代替但原理一样。
+
+```java
+static int indexFor(int h, int length) {
+    return h & (length-1);
+}
+```
+
+
+这个方法返回值就是数组下标。我们平时用map大多数情况下map里面的数据不是很多。这里与（length-1）相&,
+
+但由于绝大多数情况下length一般都小于2^16即小于65536。所以return h & (length-1);结果始终是h的低16位与（length-1）进行&运算。
+3. 原因总结
+由于和（length-1）运算，length 绝大多数情况小于2的16次方。所以始终是hashcode 的低16位（甚至更低）参与运算。要是高16位也参与运算，会让得到的下标更加散列。
+
+所以这样高16位是用不到的，如何让高16也参与运算呢。所以才有hash(Object key)方法。让他的hashCode()和自己的高16位^运算。所以(h >>> 16)得到他的高16位与hashCode()进行^运算。
+
+4. 为什么用^而不用&和|
+因为&和|都会使得结果偏向0或者1 ,并不是均匀的概念,所以用^。
+
+这就是为什么有hash(Object key)的原因。
+
+
+
+#### JDK1.8 之后
+
+相比于之前的版本，JDK1.8 以后在解决哈希冲突时有了较大的变化。
+
+当链表长度大于阈值（默认为 8）时，会首先调用 `treeifyBin()`方法。这个方法会根据 HashMap 数组来决定是否转换为红黑树。只有当数组长度大于或者等于 64 的情况下，才会执行转换红黑树操作，以减少搜索时间。否则，就是只是执行 `resize()` 方法对数组扩容。相关源码这里就不贴了，重点关注 `treeifyBin()`方法即可！
+
+![img](https://camo.githubusercontent.com/95fe53625bad15529f73f6e15e74a6937e464c3863903dcfd136ec3113c906ce/68747470733a2f2f6f7363696d672e6f736368696e612e6e65742f6f73636e65742f75702d62626132383332323836393364616537346537386461316566376139613034633638342e706e67)
+
+**类的属性：**
+
+```java
+public class HashMap<K,V> extends AbstractMap<K,V> implements Map<K,V>, Cloneable, Serializable {
+    // 序列号
+    private static final long serialVersionUID = 362498820763181265L;
+    // 默认的初始容量是16
+    static final int DEFAULT_INITIAL_CAPACITY = 1 << 4;
+    // 最大容量
+    static final int MAXIMUM_CAPACITY = 1 << 30;
+    // 默认的填充因子
+    static final float DEFAULT_LOAD_FACTOR = 0.75f;
+    // 当桶(bucket)上的结点数大于这个值时会转成红黑树
+    static final int TREEIFY_THRESHOLD = 8;
+    // 当桶(bucket)上的结点数小于这个值时树转链表
+    static final int UNTREEIFY_THRESHOLD = 6;
+    // 桶中结构转化为红黑树对应的table的最小大小
+    static final int MIN_TREEIFY_CAPACITY = 64;
+    // 存储元素的数组，总是2的幂次倍
+    transient Node<k,v>[] table;
+    // 存放具体元素的集
+    transient Set<map.entry<k,v>> entrySet;
+    // 存放元素的个数，注意这个不等于数组的长度。
+    transient int size;
+    // 每次扩容和更改map结构的计数器
+    transient int modCount;
+    // 临界值 当实际大小(容量*填充因子)超过临界值时，会进行扩容
+    int threshold;
+    // 加载因子
+    final float loadFactor;
+}
+```
+
+**loadFactor 加载因子**
+
+loadFactor 加载因子是控制数组存放数据的疏密程度，loadFactor 越趋近于 1，那么 数组中存放的数据(entry)也就越多，也就越密，也就是会让链表的长度增加，loadFactor 越小，也就是趋近于 0，数组中存放的数据(entry)也就越少，也就越稀疏。
+
+**loadFactor 太大导致查找元素效率低，太小导致数组的利用率低，存放的数据会很分散。loadFactor 的默认值为 0.75f 是官方给出的一个比较好的临界值**。
+
+给定的默认容量为 16，负载因子为 0.75。Map 在使用过程中不断的往里面存放数据，当数量达到了 16 * 0.75 = 12 就需要将当前 16 的容量进行扩容，而扩容这个过程涉及到 rehash、复制数据等操作，所以非常消耗性能。
+
+**threshold**
+
+**threshold = capacity \* loadFactor**，**当 Size>=threshold**的时候，那么就要考虑对数组的扩增了，也就是说，这个的意思就是 **衡量数组是否需要扩增的一个标准**。
+
+
+
+**Node 节点类源码:**
+
+```java
+// 继承自 Map.Entry<K,V>
+static class Node<K,V> implements Map.Entry<K,V> {
+       final int hash;// 哈希值，存放元素到hashmap中时用来与其他元素hash值比较
+       final K key;//键
+       V value;//值
+       // 指向下一个节点
+       Node<K,V> next;
+       Node(int hash, K key, V value, Node<K,V> next) {
+            this.hash = hash;
+            this.key = key;
+            this.value = value;
+            this.next = next;
+        }
+        public final K getKey()        { return key; }
+        public final V getValue()      { return value; }
+        public final String toString() { return key + "=" + value; }
+        // 重写hashCode()方法
+        public final int hashCode() {
+            return Objects.hashCode(key) ^ Objects.hashCode(value);
+        }
+
+        public final V setValue(V newValue) {
+            V oldValue = value;
+            value = newValue;
+            return oldValue;
+        }
+        // 重写 equals() 方法
+        public final boolean equals(Object o) {
+            if (o == this)
+                return true;
+            if (o instanceof Map.Entry) {
+                Map.Entry<?,?> e = (Map.Entry<?,?>)o;
+                if (Objects.equals(key, e.getKey()) &&
+                    Objects.equals(value, e.getValue()))
+                    return true;
+            }
+            return false;
+        }
+}
+```
+
+**树节点类源码:**
+
+```java
+static final class TreeNode<K,V> extends LinkedHashMap.Entry<K,V> {
+        TreeNode<K,V> parent;  // 父
+        TreeNode<K,V> left;    // 左
+        TreeNode<K,V> right;   // 右
+        TreeNode<K,V> prev;    // needed to unlink next upon deletion
+        boolean red;           // 判断颜色
+        TreeNode(int hash, K key, V val, Node<K,V> next) {
+            super(hash, key, val, next);
+        }
+        // 返回根节点
+        final TreeNode<K,V> root() {
+            for (TreeNode<K,V> r = this, p;;) {
+                if ((p = r.parent) == null)
+                    return r;
+                r = p;
+       }
+```
+
+
+
+
+
+#### 构造方法
+
+HashMap 中有四个构造方法，它们分别如下：
+
+```java
+    // 默认构造函数。
+    public HashMap() {
+        this.loadFactor = DEFAULT_LOAD_FACTOR; // all   other fields defaulted
+     }
+
+     // 包含另一个“Map”的构造函数
+     public HashMap(Map<? extends K, ? extends V> m) {
+         this.loadFactor = DEFAULT_LOAD_FACTOR;
+         putMapEntries(m, false);//下面会分析到这个方法
+     }
+
+     // 指定“容量大小”的构造函数
+     public HashMap(int initialCapacity) {
+         this(initialCapacity, DEFAULT_LOAD_FACTOR);
+     }
+
+     // 指定“容量大小”和“加载因子”的构造函数
+     public HashMap(int initialCapacity, float loadFactor) {
+         if (initialCapacity < 0)
+             throw new IllegalArgumentException("Illegal initial capacity: " + initialCapacity);
+         if (initialCapacity > MAXIMUM_CAPACITY)
+             initialCapacity = MAXIMUM_CAPACITY;
+         if (loadFactor <= 0 || Float.isNaN(loadFactor))
+             throw new IllegalArgumentException("Illegal load factor: " + loadFactor);
+         this.loadFactor = loadFactor;
+         this.threshold = tableSizeFor(initialCapacity);
+     }
+```
+
+
+
+**putMapEntries 方法：**
+
+```java
+final void putMapEntries(Map<? extends K, ? extends V> m, boolean evict) {
+    int s = m.size();
+    if (s > 0) {
+        // 判断table是否已经初始化
+        if (table == null) { // pre-size
+            // 未初始化，s为m的实际元素个数
+            float ft = ((float)s / loadFactor) + 1.0F;
+            int t = ((ft < (float)MAXIMUM_CAPACITY) ?
+                    (int)ft : MAXIMUM_CAPACITY);
+            // 计算得到的t大于阈值，则初始化阈值
+            if (t > threshold)
+                threshold = tableSizeFor(t);
+        }
+        // 已初始化，并且m元素个数大于阈值，进行扩容处理
+        else if (s > threshold)
+            resize();
+        // 将m中的所有元素添加至HashMap中
+        for (Map.Entry<? extends K, ? extends V> e : m.entrySet()) {
+            K key = e.getKey();
+            V value = e.getValue();
+            putVal(hash(key), key, value, false, evict);
+        }
+    }
+}
+```
+
+
+
+#### put 方法
+
+HashMap 只提供了 put 用于添加元素，putVal 方法只是给 put 方法调用的一个方法，并没有提供给用户使用。
+
+**对 putVal 方法添加元素的分析如下：**
+
+1. 如果定位到的数组位置没有元素 就直接插入。
+2. 如果定位到的数组位置有元素就和要插入的 key 比较，如果 key 相同就直接覆盖，如果 key 不相同，就判断 p 是否是一个树节点，如果是就调用`e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value)`将元素添加进入。如果不是就遍历链表插入(插入的是链表尾部)。
+
+![ ](https://camo.githubusercontent.com/6e61b336220f0690540fad2acc0d8c19106a32b278768582cb3e973a25a061b6/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d372f7075742545362539362542392545362542332539352e706e67)
+
+
+
+
+
+```java
+public V put(K key, V value) {
+    return putVal(hash(key), key, value, false, true);
+}
+
+final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
+                   boolean evict) {
+    Node<K,V>[] tab; Node<K,V> p; int n, i;
+    // table未初始化或者长度为0，进行扩容
+    if ((tab = table) == null || (n = tab.length) == 0)
+        n = (tab = resize()).length;
+    // (n - 1) & hash 确定元素存放在哪个桶中，桶为空，新生成结点放入桶中(此时，这个结点是放在数组中)
+    if ((p = tab[i = (n - 1) & hash]) == null)
+        tab[i] = newNode(hash, key, value, null);
+    // 桶中已经存在元素
+    else {
+        Node<K,V> e; K k;
+        // 比较桶中第一个元素(数组中的结点)的hash值相等，key相等
+        if (p.hash == hash &&
+            ((k = p.key) == key || (key != null && key.equals(k))))
+                // 将第一个元素赋值给e，用e来记录
+                e = p;
+        // hash值不相等，即key不相等；为红黑树结点
+        else if (p instanceof TreeNode)
+            // 放入树中
+            e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value);
+        // 为链表结点
+        else {
+            // 在链表最末插入结点
+            for (int binCount = 0; ; ++binCount) {
+                // 到达链表的尾部
+                if ((e = p.next) == null) {
+                    // 在尾部插入新结点
+                    p.next = newNode(hash, key, value, null);
+                    // 结点数量达到阈值(默认为 8 )，执行 treeifyBin 方法
+                    // 这个方法会根据 HashMap 数组来决定是否转换为红黑树。
+                    // 只有当数组长度大于或者等于 64 的情况下，才会执行转换红黑树操作，以减少搜索时间。否则，就是只是对数组扩容。
+                    if (binCount >= TREEIFY_THRESHOLD - 1) // -1 for 1st
+                        treeifyBin(tab, hash);
+                    // 跳出循环
+                    break;
+                }
+                // 判断链表中结点的key值与插入的元素的key值是否相等
+                if (e.hash == hash &&
+                    ((k = e.key) == key || (key != null && key.equals(k))))
+                    // 相等，跳出循环
+                    break;
+                // 用于遍历桶中的链表，与前面的e = p.next组合，可以遍历链表
+                p = e;
+            }
+        }
+        // 表示在桶中找到key值、hash值与插入元素相等的结点
+        if (e != null) {
+            // 记录e的value
+            V oldValue = e.value;
+            // onlyIfAbsent为false或者旧值为null
+            if (!onlyIfAbsent || oldValue == null)
+                //用新值替换旧值
+                e.value = value;
+            // 访问后回调
+            afterNodeAccess(e);
+            // 返回旧值
+            return oldValue;
+        }
+    }
+    // 结构性修改
+    ++modCount;
+    // 实际大小大于阈值则扩容
+    if (++size > threshold)
+        resize();
+    // 插入后回调
+    afterNodeInsertion(evict);
+    return null;
+}
+```
+
+
+
+get 方法
+
+```java
+public V get(Object key) {
+    Node<K,V> e;
+    return (e = getNode(hash(key), key)) == null ? null : e.value;
+}
+
+final Node<K,V> getNode(int hash, Object key) {
+    Node<K,V>[] tab; Node<K,V> first, e; int n; K k;
+    if ((tab = table) != null && (n = tab.length) > 0 &&
+        (first = tab[(n - 1) & hash]) != null) {
+        // 数组元素相等
+        if (first.hash == hash && // always check first node
+            ((k = first.key) == key || (key != null && key.equals(k))))
+            return first;
+        // 桶中不止一个节点
+        if ((e = first.next) != null) {
+            // 在树中get
+            if (first instanceof TreeNode)
+                return ((TreeNode<K,V>)first).getTreeNode(hash, key);
+            // 在链表中get
+            do {
+                if (e.hash == hash &&
+                    ((k = e.key) == key || (key != null && key.equals(k))))
+                    return e;
+            } while ((e = e.next) != null);
+        }
+    }
+    return null;
+}
+```
+
+
+
+
+
+resize 方法
+
+进行扩容，会伴随着一次重新 hash 分配，并且会遍历 hash 表中所有的元素，是非常耗时的。在编写程序中，要尽量避免 resize。
+
+```java
+final Node<K,V>[] resize() {
+    Node<K,V>[] oldTab = table;
+    int oldCap = (oldTab == null) ? 0 : oldTab.length;
+    int oldThr = threshold;
+    int newCap, newThr = 0;
+    if (oldCap > 0) {
+        // 超过最大值就不再扩充了，就只好随你碰撞去吧
+        if (oldCap >= MAXIMUM_CAPACITY) {
+            threshold = Integer.MAX_VALUE;
+            return oldTab;
+        }
+        // 没超过最大值，就扩充为原来的2倍
+        else if ((newCap = oldCap << 1) < MAXIMUM_CAPACITY && oldCap >= DEFAULT_INITIAL_CAPACITY)
+            newThr = oldThr << 1; // double threshold
+    }
+    else if (oldThr > 0) // initial capacity was placed in threshold
+        newCap = oldThr;
+    else {
+        // signifies using defaults
+        newCap = DEFAULT_INITIAL_CAPACITY;
+        newThr = (int)(DEFAULT_LOAD_FACTOR * DEFAULT_INITIAL_CAPACITY);
+    }
+    // 计算新的resize上限
+    if (newThr == 0) {
+        float ft = (float)newCap * loadFactor;
+        newThr = (newCap < MAXIMUM_CAPACITY && ft < (float)MAXIMUM_CAPACITY ? (int)ft : Integer.MAX_VALUE);
+    }
+    threshold = newThr;
+    @SuppressWarnings({"rawtypes","unchecked"})
+        Node<K,V>[] newTab = (Node<K,V>[])new Node[newCap];
+    table = newTab;
+    if (oldTab != null) {
+        // 把每个bucket都移动到新的buckets中
+        for (int j = 0; j < oldCap; ++j) {
+            Node<K,V> e;
+            if ((e = oldTab[j]) != null) {
+                oldTab[j] = null;
+                if (e.next == null)
+                    newTab[e.hash & (newCap - 1)] = e;
+                else if (e instanceof TreeNode)
+                    ((TreeNode<K,V>)e).split(this, newTab, j, oldCap);
+                else {
+                    Node<K,V> loHead = null, loTail = null;
+                    Node<K,V> hiHead = null, hiTail = null;
+                    Node<K,V> next;
+                    do {
+                        next = e.next;
+                        // 原索引
+                        if ((e.hash & oldCap) == 0) {
+                            if (loTail == null)
+                                loHead = e;
+                            else
+                                loTail.next = e;
+                            loTail = e;
+                        }
+                        // 原索引+oldCap
+                        else {
+                            if (hiTail == null)
+                                hiHead = e;
+                            else
+                                hiTail.next = e;
+                            hiTail = e;
+                        }
+                    } while ((e = next) != null);
+                    // 原索引放到bucket里
+                    if (loTail != null) {
+                        loTail.next = null;
+                        newTab[j] = loHead;
+                    }
+                    // 原索引+oldCap放到bucket里
+                    if (hiTail != null) {
+                        hiTail.next = null;
+                        newTab[j + oldCap] = hiHead;
+                    }
+                }
+            }
+        }
+    }
+    return newTab;
+}
+```
+
+
+
+### ConcurrentHashMap 1.8
+
+#### 1. 存储结构
+
+![Java8 ConcurrentHashMap 存储结构（图片来自 javadoop）](https://github.com/Snailclimb/JavaGuide/raw/master/docs/java/collection/images/java8_concurrenthashmap.png)
+
+可以发现 Java8 的 ConcurrentHashMap 相对于 Java7 来说变化比较大，不再是之前的 **Segment 数组 + HashEntry 数组 + 链表**，而是 **Node 数组 + 链表 / 红黑树**。当冲突链表达到一定长度时，链表会转换成红黑树。
+
+#### 2. 初始化 initTable
+
+```java
+/**
+ * Initializes table, using the size recorded in sizeCtl.
+ */
+private final Node<K,V>[] initTable() {
+    Node<K,V>[] tab; int sc;
+    while ((tab = table) == null || tab.length == 0) {
+        ／／　如果 sizeCtl < 0 ,说明另外的线程执行CAS 成功，正在进行初始化。
+        if ((sc = sizeCtl) < 0)
+            // 让出 CPU 使用权
+            Thread.yield(); // lost initialization race; just spin
+        else if (U.compareAndSwapInt(this, SIZECTL, sc, -1)) {
+            try {
+                if ((tab = table) == null || tab.length == 0) {
+                    int n = (sc > 0) ? sc : DEFAULT_CAPACITY;
+                    @SuppressWarnings("unchecked")
+                    Node<K,V>[] nt = (Node<K,V>[])new Node<?,?>[n];
+                    table = tab = nt;
+                    sc = n - (n >>> 2);
+                }
+            } finally {
+                sizeCtl = sc;
+            }
+            break;
+        }
+    }
+    return tab;
+}
+```
+
+
+
+从源码中可以发现 ConcurrentHashMap 的初始化是通过**自旋和 CAS** 操作完成的。里面需要注意的是变量 `sizeCtl` ，它的值决定着当前的初始化状态。
+
+1. -1 说明正在初始化
+2. -N 说明有N-1个线程正在进行扩容
+3. 表示 table 初始化大小，如果 table 没有初始化
+4. 表示 table 容量，如果 table　已经初始化。
+
+
+
+#### 3. put
+
+直接过一遍 put 源码。
+
+```java
+public V put(K key, V value) {
+    return putVal(key, value, false);
+}
+
+/** Implementation for put and putIfAbsent */
+final V putVal(K key, V value, boolean onlyIfAbsent) {
+    // key 和 value 不能为空
+    if (key == null || value == null) throw new NullPointerException();
+    int hash = spread(key.hashCode());
+    int binCount = 0;
+    for (Node<K,V>[] tab = table;;) {
+        // f = 目标位置元素
+        Node<K,V> f; int n, i, fh;// fh 后面存放目标位置的元素 hash 值
+        if (tab == null || (n = tab.length) == 0)
+            // 数组桶为空，初始化数组桶（自旋+CAS)
+            tab = initTable();
+        else if ((f = tabAt(tab, i = (n - 1) & hash)) == null) {
+            // 桶内为空，CAS 放入，不加锁，成功了就直接 break 跳出
+            if (casTabAt(tab, i, null,new Node<K,V>(hash, key, value, null)))
+                break;  // no lock when adding to empty bin
+        }
+        else if ((fh = f.hash) == MOVED)
+            tab = helpTransfer(tab, f);
+        else {
+            V oldVal = null;
+            // 使用 synchronized 加锁加入节点
+            synchronized (f) {
+                if (tabAt(tab, i) == f) {
+                    // 说明是链表
+                    if (fh >= 0) {
+                        binCount = 1;
+                        // 循环加入新的或者覆盖节点
+                        for (Node<K,V> e = f;; ++binCount) {
+                            K ek;
+                            if (e.hash == hash &&
+                                ((ek = e.key) == key ||
+                                 (ek != null && key.equals(ek)))) {
+                                oldVal = e.val;
+                                if (!onlyIfAbsent)
+                                    e.val = value;
+                                break;
+                            }
+                            Node<K,V> pred = e;
+                            if ((e = e.next) == null) {
+                                pred.next = new Node<K,V>(hash, key,
+                                                          value, null);
+                                break;
+                            }
+                        }
+                    }
+                    else if (f instanceof TreeBin) {
+                        // 红黑树
+                        Node<K,V> p;
+                        binCount = 2;
+                        if ((p = ((TreeBin<K,V>)f).putTreeVal(hash, key,
+                                                       value)) != null) {
+                            oldVal = p.val;
+                            if (!onlyIfAbsent)
+                                p.val = value;
+                        }
+                    }
+                }
+            }
+            if (binCount != 0) {
+                if (binCount >= TREEIFY_THRESHOLD)
+                    treeifyBin(tab, i);
+                if (oldVal != null)
+                    return oldVal;
+                break;
+            }
+        }
+    }
+    addCount(1L, binCount);
+    return null;
+}
+```
+
+1. 根据 key 计算出 hashcode 。
+2. 判断是否需要进行初始化。
+3. 即为当前 key 定位出的 Node，如果为空表示当前位置可以写入数据，利用 CAS 尝试写入，失败则自旋保证成功。
+4. 如果当前位置的 `hashcode == MOVED == -1`,则需要进行扩容。
+5. 如果都不满足，则利用 synchronized 锁写入数据。
+6. 如果数量大于 `TREEIFY_THRESHOLD` 则要转换为红黑树。
+
+#### 4. get
+
+get 流程比较简单，直接过一遍源码。
+
+```java
+public V get(Object key) {
+    Node<K,V>[] tab; Node<K,V> e, p; int n, eh; K ek;
+    // key 所在的 hash 位置
+    int h = spread(key.hashCode());
+    if ((tab = table) != null && (n = tab.length) > 0 &&
+        (e = tabAt(tab, (n - 1) & h)) != null) {
+        // 如果指定位置元素存在，头结点hash值相同
+        if ((eh = e.hash) == h) {
+            if ((ek = e.key) == key || (ek != null && key.equals(ek)))
+                // key hash 值相等，key值相同，直接返回元素 value
+                return e.val;
+        }
+        else if (eh < 0)
+            // 头结点hash值小于0，说明正在扩容或者是红黑树，find查找
+            return (p = e.find(h, key)) != null ? p.val : null;
+        while ((e = e.next) != null) {
+            // 是链表，遍历查找
+            if (e.hash == h &&
+                ((ek = e.key) == key || (ek != null && key.equals(ek))))
+                return e.val;
+        }
+    }
+    return null;
+}
+```
+
+总结一下 get 过程：
+
+1. 根据 hash 值计算位置。
+2. 查找到指定位置，如果头节点就是要找的，直接返回它的 value.
+3. 如果头节点 hash 值小于 0 ，说明正在扩容或者是红黑树，查找之。
+4. 如果是链表，遍历查找之。
+
+总结：
+
+总的来说 ConcruuentHashMap 在 Java8 中相对于 Java7 来说变化还是挺大的
+
+#### 总结
+
+Java7 中 ConcruuentHashMap 使用的分段锁，也就是每一个 Segment 上同时只有一个线程可以操作，每一个 Segment 都是一个类似 HashMap 数组的结构，它可以扩容，它的冲突会转化为链表。但是 Segment 的个数一但初始化就不能改变。
+
+Java8 中的 ConcruuentHashMap 使用的 Synchronized 锁加 CAS 的机制。结构也由 Java7 中的 **Segment 数组 + HashEntry 数组 + 链表** 进化成了 **Node 数组 + 链表 / 红黑树**，Node 是类似于一个 HashEntry 的结构。它的冲突再达到一定大小时会转化成红黑树，在冲突小于一定数量时又退回链表。
+
+有些同学可能对 Synchronized 的性能存在疑问，其实 Synchronized 锁自从引入锁升级策略后，性能不再是问题，有兴趣的同学可以自己了解下 Synchronized 的**锁升级**。
+
+
+
+
+
+### `System.arraycopy()` 和 `Arrays.copyOf()`方法
+
+#### `System.arraycopy()` 方法
+
+```java
+public static void main(String[] args) {
+    int[] a = new int[]{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    System.arraycopy(a, 2, a, 3, 3);
+    //源数组、元素中起始位置、目标数组、目标数组中起始位置、复制的长度
+    for (int i = 0; i < a.length; i++) {
+        System.out.print(a[i] + " ");
+        //0 1 2 2 3 4 6 7 8 9
+    }
+}
+```
+
+#### `Arrays.copyOf()`方法
+
+```java
+int[] a = new int[]{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+int[] b = Arrays.copyOf(a, 3);
+for (int i = 0; i < b.length; i++) {
+    System.out.print(b[i] + " ");
+    //0 1 2 
+}
+```
+
+####  两者联系和区别
+
+**联系：**
+
+看两者源代码可以发现 `copyOf()`内部实际调用了 `System.arraycopy()` 方法
+
+**区别：**
+
+`arraycopy()` 需要目标数组，将原数组拷贝到你自己定义的数组里或者原数组，而且可以选择拷贝的起点和长度以及放入新数组中的位置 `copyOf()` 是系统自动在内部新建一个数组，并返回该数组。
+
+```java
+/**
+ * Copies the specified array, truncating or padding with zeros (if necessary)
+ * so the copy has the specified length.  For all indices that are
+ * valid in both the original array and the copy, the two arrays will
+ * contain identical values.  For any indices that are valid in the
+ * copy but not the original, the copy will contain {@code 0}.
+ * Such indices will exist if and only if the specified length
+ * is greater than that of the original array.
+ *
+ * @param original the array to be copied
+ * @param newLength the length of the copy to be returned
+ * @return a copy of the original array, truncated or padded with zeros
+ *     to obtain the specified length
+ * @throws NegativeArraySizeException if {@code newLength} is negative
+ * @throws NullPointerException if {@code original} is null
+ * @since 1.6
+ */
+public static int[] copyOf(int[] original, int newLength) {
+    int[] copy = new int[newLength];
+    System.arraycopy(original, 0, copy, 0,
+                     Math.min(original.length, newLength));
+    return copy;
+}
+```
 
 
 
@@ -1012,6 +1960,59 @@ public class TestGeneric {
 
 
 
+## 注解
+
+### @SuppressWarnings
+
+**简介**：java.lang.SuppressWarnings是J2SE5.0中标准的Annotation之一。可以标注在类、字段、方法、参数、构造方法，以及局部变量上。
+**作用**：告诉编译器忽略指定的警告，不用在编译完成后出现警告信息。
+**使用**：
+
+```java
+@SuppressWarnings(“”)
+@SuppressWarnings({})
+@SuppressWarnings(value={})
+```
+
+**根据sun的官方文档描述：**
+value -将由编译器在注释的元素中取消显示的警告集。允许使用重复的名称。忽略第二个和后面出现的名称。
+
+出现未被识别的警告名不是错误：编译器必须忽略无法识别的所有警告名。但如果某个注释包含未被识别的警告名，那么编译器可以随意发出一个警告。
+
+各编译器供应商应该将它们所支持的警告名连同注释类型一起记录。鼓励各供应商之间相互合作，确保在多个编译器中使用相同的名称。
+
+示例：
+
+```java
+ @SuppressWarnings("unchecked")
+```
+
+告诉编译器忽略 unchecked 警告信息，如使用List，ArrayList等未进行参数化产生的警告信息。
+
+```java
+@SuppressWarnings("serial")
+```
+
+如果编译器出现这样的警告信息：The serializable class WmailCalendar does notdeclare a static final serialVersionUID field of type long使用这个注释将警告信息去掉。
+
+```java
+ @SuppressWarnings("deprecation")
+```
+
+如果使用了使用@Deprecated注释的方法，编译器将出现警告信息。使用这个注释将警告信息去掉。
+
+```java
+@SuppressWarnings("unchecked", "deprecation")
+```
+
+告诉编译器同时忽略unchecked和deprecation的警告信息。
+
+```java
+@SuppressWarnings(value={"unchecked", "deprecation"})
+```
+
+等同于@SuppressWarnings("unchecked", "deprecation")
+
 
 
 
@@ -1118,11 +2119,281 @@ public class TestEnum {
 
 
 
+## CAS(Compare And Swap)
+
+- synchronized是悲观锁，这种线程一旦得到锁，其他需要锁的线程就挂起的情况就是悲观锁。
+- CAS操作的就是乐观锁，每次不加锁而是假设没有冲突而去完成某项操作，如果因为冲突失败就重试，直到成功为止。
+
+在进入正题之前，我们先理解下下面的代码:
+
+```java
+private static int count = 0;
+
+public static void main(String[] args) {
+    for (int i = 0; i < 5; i++) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    Thread.sleep(10);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                //每个线程让count自增100次
+                for (int i = 0; i < 100; i++) {
+                    count++;
+                }
+            }
+        }).start();
+    }
+
+    try {
+        Thread.sleep(1000);
+    } catch (Exception e) {
+        e.printStackTrace();
+    }
+    System.out.println(count);//408
+}
+```
+
+请问cout的输出值是否为500？答案是否定的，因为这个程序是线程不安全的，所以造成的结果count值可能小于500;
+
+那么如何改造成线程安全的呢，其实我们可以使用上`Synchronized`同步锁,我们只需要在count++的位置添加同步锁，代码如下:
+
+```java
+package Test;
+
+public class TestCAS {
+    private static int count = 0;
+
+    public static void main(String[] args) {
+        for (int i = 0; i < 5; i++) {
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        Thread.sleep(10);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                    //每个线程让count自增100次
+                    for (int i = 0; i < 100; i++) {
+                        synchronized (TestCAS.class) {
+                            count++;
+                        }
+                    }
+                }
+            }).start();
+        }
+
+        try {
+            Thread.sleep(1000);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        System.out.println(count);//500
+    }
+}
+```
+
+加了同步锁之后，count自增的操作变成了原子性操作，所以最终的输出一定是count=500，代码实现了线程安全。
+
+但是`Synchronized`虽然确保了线程的安全，但是在性能上却不是最优的，`Synchronized`关键字会让没有得到锁资源的线程进入`BLOCKED`状态，而后在争夺到锁资源后恢复为`RUNNABLE`状态，这个过程中涉及到操作系统用户模式和内核模式的转换，代价比较高。
+
+尽管Java1.6为`Synchronized`做了优化，增加了从偏向锁到轻量级锁再到重量级锁的过度，但是在最终转变为重量级锁之后，性能仍然较低。
+
+所谓原子操作类，指的是java.util.concurrent.atomic包下，一系列以Atomic开头的包装类。例如`AtomicBoolean`，`AtomicInteger`，`AtomicLong`。它们分别用于`Boolean`，`Integer`，`Long`类型的原子性操作。
+
+```java
+import java.util.concurrent.atomic.AtomicInteger;
+
+public class TestCAS {
+    private static AtomicInteger count = new AtomicInteger(0);
+
+    public static void main(String[] args) {
+        for (int i = 0; i < 5; i++) {
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        Thread.sleep(10);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                    //每个线程让count自增100次
+                    for (int i = 0; i < 100; i++) {
+                        count.incrementAndGet();
+                    }
+                }
+            }).start();
+        }
+
+        try{
+            Thread.sleep(1000);
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+        System.out.println(count);//500
+    }
+}
+```
+
+使用AtomicInteger之后，最终的输出结果同样可以保证是200。并且在某些情况下，代码的性能会比Synchronized更好。
+
+而Atomic操作的底层实现正是利用的CAS机制，好的，我们切入到这个博客的正点。
+
+### 什么是CAS机制
+
+CAS是英文单词Compare And Swap的缩写，翻译过来就是比较并替换。
+
+CAS机制当中使用了3个基本操作数：内存地址V，旧的预期值A，要修改的新值B。
+
+更新一个变量的时候，只有当变量的预期值A和内存地址V当中的实际值相同时，才会将内存地址V对应的值修改为B。
+
+CAS是英文单词Compare And Swap的缩写，翻译过来就是比较并替换。
+
+CAS机制当中使用了3个基本操作数：内存地址V，旧的预期值A，要修改的新值B。
+
+更新一个变量(想要变成B)的时候，只有当变量的预期值A和内存地址V当中的实际值相同时，才会将内存地址V对应的值修改为B。
+
+这样说或许有些抽象，我们来看一个例子：
+
+1.在内存地址V当中，存储着值为10的变量。
+
+![img](https://upload-images.jianshu.io/upload_images/5630287-350bc3c474eef0e8.jpg?imageMogr2/auto-orient/strip|imageView2/2/w/360/format/webp)
+
+2.此时线程1想要把变量的值增加1。对线程1来说，旧的预期值A=10，要修改的新值B=11。
+
+![img](https://upload-images.jianshu.io/upload_images/5630287-eb7709492f262c25.jpg?imageMogr2/auto-orient/strip|imageView2/2/w/384/format/webp)
+
+3.在线程1要提交更新之前，另一个线程2抢先一步，把内存地址V中的变量值率先更新成了11。
+
+![img](https://upload-images.jianshu.io/upload_images/5630287-cab4d45aa3e06369.jpg?imageMogr2/auto-orient/strip|imageView2/2/w/384/format/webp)
+
+
+
+
+
+4.线程1开始提交更新，首先进行A和地址V的实际值比较（Compare），发现A不等于V的实际值，提交失败。
+
+![img](https://upload-images.jianshu.io/upload_images/5630287-a250c3f723b73be0.jpg?imageMogr2/auto-orient/strip|imageView2/2/w/384/format/webp)
+
+5.线程1重新获取内存地址V的当前值，并重新计算想要修改的新值。此时对线程1来说，A=11，B=12。这个重新尝试的过程被称为自旋。
+
+![img](https://upload-images.jianshu.io/upload_images/5630287-f638cadea7b6cb96.jpg?imageMogr2/auto-orient/strip|imageView2/2/w/384/format/webp)
+
+6.这一次比较幸运，没有其他线程改变地址V的值。线程1进行Compare，发现A和地址V的实际值是相等的。
+
+![img](https://upload-images.jianshu.io/upload_images/5630287-0a3d0b3926366d63.jpg?imageMogr2/auto-orient/strip|imageView2/2/w/384/format/webp)
+
+7.线程1进行SWAP，把地址V的值替换为B，也就是12。
+
+![img](https://upload-images.jianshu.io/upload_images/5630287-f6c83ad3ca4f3294.jpg?imageMogr2/auto-orient/strip|imageView2/2/w/384/format/webp)
+
+从思想上来说，Synchronized属于悲观锁，悲观地认为程序中的并发情况严重，所以严防死守。CAS属于乐观锁，乐观地认为程序中的并发情况不那么严重，所以让线程不断去尝试更新。
+
+### CAS乐观锁小demo
+
+看到上面的解释是不是索然无味，查找了很多资料也没完全弄明白，通过几次验证后，终于明白，最终可以理解成一个无阻塞多线程争抢资源的模型。先上代码
+
+```java
+package Test;
+
+import java.util.concurrent.atomic.AtomicBoolean;
+
+public class AtomicBooleanTest implements Runnable {
+
+    private static AtomicBoolean flag = new AtomicBoolean(true);
+
+    public static void main(String[] args) {
+        AtomicBooleanTest ast = new AtomicBooleanTest();
+        Thread thread1 = new Thread(ast);
+        Thread thread = new Thread(ast);
+        thread1.start();
+        thread.start();
+    }
+    @Override
+    public void run() {
+        System.out.println("thread:"+Thread.currentThread().getName()+";flag:"+flag.get());
+        if (flag.compareAndSet(true,false)){
+            System.out.println(Thread.currentThread().getName()+""+flag.get());
+            try {
+                Thread.sleep(5000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            flag.set(true);
+        }else{
+            System.out.println("重试机制thread:"+Thread.currentThread().getName()+";flag:"+flag.get());
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            run();//继续调用自己
+        }
+
+    }
+}
+```
+
+程序运行结果：
+
+```java
+thread:Thread-1;flag:true
+thread:Thread-0;flag:true
+重试机制thread:Thread-0;flag:false
+Thread-1false
+thread:Thread-0;flag:false
+重试机制thread:Thread-0;flag:false
+thread:Thread-0;flag:false
+重试机制thread:Thread-0;flag:false
+thread:Thread-0;flag:false
+重试机制thread:Thread-0;flag:false
+thread:Thread-0;flag:false
+重试机制thread:Thread-0;flag:false
+thread:Thread-0;flag:false
+重试机制thread:Thread-0;flag:false
+thread:Thread-0;flag:false
+重试机制thread:Thread-0;flag:false
+thread:Thread-0;flag:false
+重试机制thread:Thread-0;flag:false
+thread:Thread-0;flag:false
+重试机制thread:Thread-0;flag:false
+thread:Thread-0;flag:false
+重试机制thread:Thread-0;flag:false
+thread:Thread-0;flag:true
+Thread-0false
+
+Process finished with exit code 0
+```
+
+这里无论怎么运行，Thread-1、Thread-0都会执行if=true条件，而且还不会产生线程脏读脏写，这是如何做到的了，这就用到了我们的compareAndSet(boolean expect,boolean update)方法
+ 我们看到当Thread-1在进行操作的时候，Thread一直在进行重试机制，程序原理图:
+
+![img](https://upload-images.jianshu.io/upload_images/5630287-98b1979eb2f85998.png?imageMogr2/auto-orient/strip|imageView2/2/w/700/format/webp)
+
+这个图中重最要的是compareAndSet(true,false)方法要拆开成compare(true)方法和Set(false)方法理解，是compare(true)是等于true后，就马上设置共享内存为false，这个时候，其它线程无论怎么走都无法走到只有得到共享内存为true时的程序隔离方法区。
+
+看到这里，这种CAS机制就是完美的吗？这个程序其实存在一个问题，不知道大家注意到没有？
+
+但是这种得不到状态为true时使用递归算法是很耗cpu资源的，所以一般情况下，都会有线程sleep。
+
+CAS的缺点：
+
+1.CPU开销较大
+ 在并发量比较高的情况下，如果许多线程反复尝试更新某一个变量，却又一直更新不成功，循环往复，会给CPU带来很大的压力。
+
+2.不能保证代码块的原子性
+ CAS机制所保证的只是一个变量的原子性操作，而不能保证整个代码块的原子性。比如需要保证3个变量共同进行原子性的更新，就不得不使用Synchronized了。
+
+
+
+
+
 
 
 ## 多线程
-
-
 
 
 
