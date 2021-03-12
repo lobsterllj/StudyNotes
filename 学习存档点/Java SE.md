@@ -1599,6 +1599,10 @@ Java 泛型（generics）是 JDK 5 中引入的一个新特性, 泛型提供了�
         Class<? extends List> clazz = list.getClass();
         Method add = clazz.getDeclaredMethod("add", Object.class);
         add.invoke(list, "kl");//但是通过反射添加，是可以的
+//        int i = Integer.parseInt(list.get(1));//require String provide Integer
+//        int i = (int)list.get(1);//java.lang.ClassCastException: class java.lang.String cannot be cast to class java.lang.Integer
+
+        System.out.println(list.get(1));
         System.out.println(list);
 ```
 
