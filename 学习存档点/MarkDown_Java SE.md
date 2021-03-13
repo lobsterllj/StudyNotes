@@ -2,17 +2,13 @@
 
 ## Java 集合框架
 
-![img](https://camo.githubusercontent.com/af5096630c84d094f29ed83f38b39ff1468a0d4d51fa3192f747bed31dbf0de8/68747470733a2f2f67756964652d626c6f672d696d616765732e6f73732d636e2d7368656e7a68656e2e616c6979756e63732e636f6d2f736f757263652d636f64652f647562626f2f6a6176612d636f6c6c656374696f6e2d6869657261726368792e706e67)
+
+
+![Java Collection框架的层次结构](MarkDown_Java%20SE.assets/java-collection-hierarchy.png)
 
 
 
-
-
-
-
-
-
-![image-20210310203841688](C:\Users\17814\AppData\Roaming\Typora\typora-user-images\image-20210310203841688.png)
+![image-20210310203841688](MarkDown_Java%20SE.assets/image-20210310203841688.png)
 
 
 
@@ -844,7 +840,7 @@ static int indexFor(int h, int length) {
 
 当链表长度大于阈值（默认为 8）时，会首先调用 `treeifyBin()`方法。这个方法会根据 HashMap 数组来决定是否转换为红黑树。只有当数组长度大于或者等于 64 的情况下，才会执行转换红黑树操作，以减少搜索时间。否则，就是只是执行 `resize()` 方法对数组扩容。相关源码这里就不贴了，重点关注 `treeifyBin()`方法即可！
 
-![img](https://camo.githubusercontent.com/95fe53625bad15529f73f6e15e74a6937e464c3863903dcfd136ec3113c906ce/68747470733a2f2f6f7363696d672e6f736368696e612e6e65742f6f73636e65742f75702d62626132383332323836393364616537346537386461316566376139613034633638342e706e67)
+![img](MarkDown_Java%20SE.assets/68747470733a2f2f6f7363696d672e6f736368696e612e6e65742f6f73636e65742f75702d62626132383332323836393364616537346537386461316566376139613034633638342e706e67)
 
 **类的属性：**
 
@@ -1038,7 +1034,7 @@ HashMap 只提供了 put 用于添加元素，putVal 方法只是给 put 方法�
 1. 如果定位到的数组位置没有元素 就直接插入。
 2. 如果定位到的数组位置有元素就和要插入的 key 比较，如果 key 相同就直接覆盖，如果 key 不相同，就判断 p 是否是一个树节点，如果是就调用`e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value)`将元素添加进入。如果不是就遍历链表插入(插入的是链表尾部)。
 
-![ ](https://camo.githubusercontent.com/6e61b336220f0690540fad2acc0d8c19106a32b278768582cb3e973a25a061b6/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d372f7075742545362539362542392545362542332539352e706e67)
+![ ](MarkDown_Java%20SE.assets/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d372f7075742545362539362542392545362542332539352e706e67)
 
 
 
@@ -1252,7 +1248,7 @@ final Node<K,V>[] resize() {
 
 #### 1. 存储结构
 
-![Java8 ConcurrentHashMap 存储结构（图片来自 javadoop）](https://github.com/Snailclimb/JavaGuide/raw/master/docs/java/collection/images/java8_concurrenthashmap.png)
+![Java8 ConcurrentHashMap 存储结构（图片来自 javadoop）](MarkDown_Java%20SE.assets/java8_concurrenthashmap.png)
 
 可以发现 Java8 的 ConcurrentHashMap 相对于 Java7 来说变化比较大，不再是之前的 **Segment 数组 + HashEntry 数组 + 链表**，而是 **Node 数组 + 链表 / 红黑树**。当冲突链表达到一定长度时，链表会转换成红黑树。
 
@@ -1444,7 +1440,7 @@ Java8 中的 ConcruuentHashMap 使用的 Synchronized 锁加 CAS 的机制。结
 
 ### == vs equals
 
-![image-20210312225203351](C:\Users\17814\AppData\Roaming\Typora\typora-user-images\image-20210312225203351.png)
+![image-20210312225203351](MarkDown_Java%20SE.assets/image-20210312225203351.png)
 
 作者：leeon
 链接：https://www.zhihu.com/question/26872848/answer/34364603
@@ -1870,7 +1866,7 @@ public static void main(String[] args) {
 
 当调用 countLegs1 时，就会飘红，提示的错误信息如下：
 
-![img](https://user-gold-cdn.xitu.io/2019/8/17/16c9df5681ee06f4?imageView2/0/w/1280/h/960/format/webp/ignore-error/1)
+![img](MarkDown_Java%20SE.assets/16c9df5681ee06f4)
 
 所以，对于不确定或者不关心实际要操作的类型，可以使用无限制通配符（尖括号里一个问号，即 <?> ），表示可以持有任何类型。像 countLegs 方法中，限定了上届，但是不关心具体类型是什么，所以对于传入的 Animal 的所有子类都可以支持，并且不会报错。而 countLegs1 就不行。
 
@@ -2130,7 +2126,7 @@ value -将由编译器在注释的元素中取消显示的警告集。允许使�
 
 在 Java 中，所有的异常都有一个共同的祖先 Throwable（可抛出）。Throwable 指定代码中可用异常传播机制通过 Java 应用程序传输的任何问题的共性。
 
-![img](https://i0.hdslb.com/bfs/article/1e70c56573122a76a57de2054604400c963e5c0f.png@1320w_694h.webp)
+![img](MarkDown_Java%20SE.assets/1e70c56573122a76a57de2054604400c963e5c0f.png@1320w_694h.webp)
 
 Throwable： 有两个重要的子类：Exception（异常）和 Error（错误），二者都是 Java 异常处理的重要子类，各自都包含大量子类。异常和错误的区别是：异常能被程序本身可以处理，错误是无法处理。
       Throwable类中常用方法如下：
@@ -2148,7 +2144,7 @@ Exception（异常）:是程序本身可以处理的异常。Exception 类有一
       2.非运行时异常 （编译异常）：是RuntimeException以外的异常，类型上都属于Exception类及其子类。从程序语法角度讲是必须进行处理的异常，如果不处理，程序就不能编译通过。如IOException、SQLException等以及用户自定义的Exception异常，一般情况下不自定义检查异常。
 
 ​    	通常，Java的异常（Throwable）分为可查的异常（checked exceptions）和不可查的异常（unchecked exceptions）。
-![img](https://i0.hdslb.com/bfs/article/18a4cbf779949d4435312ea7422b9ce66c4b3fdc.jpg@1168w_684h.webp)
+![img](MarkDown_Java%20SE.assets/18a4cbf779949d4435312ea7422b9ce66c4b3fdc.jpg@1168w_684h.webp)
 
 1. 可查异常（编译器要求必须处置的异常）：正确的程序在运行中，很容易出现的、情理可容的异常状况。除了Exception中的RuntimeException及RuntimeException的子类以外，其他的Exception类及其子类(例如：IOException和ClassNotFoundException)都属于可查异常。这种异常的特点是Java编译器会检查它，也就是说，当程序中可能出现这类异常，要么用try-catch语句捕获它，要么用throws子句声明抛出它，否则编译不会通过。
 2. 不可查异常(编译器不要求强制处置的异常):包括运行时异常（RuntimeException与其子类）和错误（Error）。RuntimeException表示编译器不会检查程序是否对RuntimeException作了处理，在程序中不必捕获RuntimException类型的异常，也不必在方法体声明抛出RuntimeException类。RuntimeException发生的时候，表示程序中出现了编程错误，所以应该找出错误修改程序，而不是去捕获RuntimeException。
@@ -2553,15 +2549,15 @@ CAS机制当中使用了3个基本操作数：内存地址V，旧的预期值A�
 
 1.在内存地址V当中，存储着值为10的变量。
 
-![img](https://upload-images.jianshu.io/upload_images/5630287-350bc3c474eef0e8.jpg?imageMogr2/auto-orient/strip|imageView2/2/w/360/format/webp)
+![img](MarkDown_Java%20SE.assets/5630287-350bc3c474eef0e8.jpg)
 
 2.此时线程1想要把变量的值增加1。对线程1来说，旧的预期值A=10，要修改的新值B=11。
 
-![img](https://upload-images.jianshu.io/upload_images/5630287-eb7709492f262c25.jpg?imageMogr2/auto-orient/strip|imageView2/2/w/384/format/webp)
+![img](MarkDown_Java%20SE.assets/5630287-eb7709492f262c25.jpg)
 
 3.在线程1要提交更新之前，另一个线程2抢先一步，把内存地址V中的变量值率先更新成了11。
 
-![img](https://upload-images.jianshu.io/upload_images/5630287-cab4d45aa3e06369.jpg?imageMogr2/auto-orient/strip|imageView2/2/w/384/format/webp)
+![img](MarkDown_Java%20SE.assets/5630287-cab4d45aa3e06369.jpg)
 
 
 
@@ -2569,19 +2565,19 @@ CAS机制当中使用了3个基本操作数：内存地址V，旧的预期值A�
 
 4.线程1开始提交更新，首先进行A和地址V的实际值比较（Compare），发现A不等于V的实际值，提交失败。
 
-![img](https://upload-images.jianshu.io/upload_images/5630287-a250c3f723b73be0.jpg?imageMogr2/auto-orient/strip|imageView2/2/w/384/format/webp)
+![img](MarkDown_Java%20SE.assets/5630287-a250c3f723b73be0.jpg)
 
 5.线程1重新获取内存地址V的当前值，并重新计算想要修改的新值。此时对线程1来说，A=11，B=12。这个重新尝试的过程被称为自旋。
 
-![img](https://upload-images.jianshu.io/upload_images/5630287-f638cadea7b6cb96.jpg?imageMogr2/auto-orient/strip|imageView2/2/w/384/format/webp)
+![img](MarkDown_Java%20SE.assets/5630287-f638cadea7b6cb96.jpg)
 
 6.这一次比较幸运，没有其他线程改变地址V的值。线程1进行Compare，发现A和地址V的实际值是相等的。
 
-![img](https://upload-images.jianshu.io/upload_images/5630287-0a3d0b3926366d63.jpg?imageMogr2/auto-orient/strip|imageView2/2/w/384/format/webp)
+![img](MarkDown_Java%20SE.assets/5630287-0a3d0b3926366d63.jpg)
 
 7.线程1进行SWAP，把地址V的值替换为B，也就是12。
 
-![img](https://upload-images.jianshu.io/upload_images/5630287-f6c83ad3ca4f3294.jpg?imageMogr2/auto-orient/strip|imageView2/2/w/384/format/webp)
+![img](MarkDown_Java%20SE.assets/5630287-f6c83ad3ca4f3294.jpg)
 
 从思想上来说，Synchronized属于悲观锁，悲观地认为程序中的并发情况严重，所以严防死守。CAS属于乐观锁，乐观地认为程序中的并发情况不那么严重，所以让线程不断去尝试更新。
 
@@ -2664,7 +2660,7 @@ Process finished with exit code 0
 这里无论怎么运行，Thread-1、Thread-0都会执行if=true条件，而且还不会产生线程脏读脏写，这是如何做到的了，这就用到了我们的compareAndSet(boolean expect,boolean update)方法
  我们看到当Thread-1在进行操作的时候，Thread一直在进行重试机制，程序原理图:
 
-![img](https://upload-images.jianshu.io/upload_images/5630287-98b1979eb2f85998.png?imageMogr2/auto-orient/strip|imageView2/2/w/700/format/webp)
+![img](MarkDown_Java%20SE.assets/5630287-98b1979eb2f85998.png)
 
 这个图中重最要的是compareAndSet(true,false)方法要拆开成compare(true)方法和Set(false)方法理解，是compare(true)是等于true后，就马上设置共享内存为false，这个时候，其它线程无论怎么走都无法走到只有得到共享内存为true时的程序隔离方法区。
 
