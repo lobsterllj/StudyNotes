@@ -6,7 +6,7 @@
 
 
 
-![img](Mark_Down_Computer%20Networks.assets/aHR0cDovL3d3MS5zaW5haW1nLmNuL2xhcmdlLzAwNUY0OGdibHkxZzQxdm1nanUzdWozMGwyMGI3d2dmLmpwZw)
+![img](MarkDown_Computer%20Networks.assets/aHR0cDovL3d3MS5zaW5haW1nLmNuL2xhcmdlLzAwNUY0OGdibHkxZzQxdm1nanUzdWozMGwyMGI3d2dmLmpwZw-1615731937573)
 
 
 
@@ -28,7 +28,7 @@
 
 TCP报文结构
 
-![image-20210313001710392](Mark_Down_Computer%20Networks.assets/image-20210313001710392.png)
+![image-20210313001710392](MarkDown_Computer%20Networks.assets/image-20210313001710392-1615731941746.png)
 
   序列号seq：占4个字节，用来标记数据段的顺序，TCP把连接中发送的所有数据字节都编上一个序号，第一个字节的编号由本地随机产生；给字节编上序号后，就给每一个报文段指派一个序号；序列号seq就是这个报文段中的第一个字节的数据编号。
 
@@ -52,7 +52,7 @@ TCP报文结构
 
 三次握手（Three-way Handshake）其实就是指建立一个TCP连接时，需要客户端和服务器总共发送3个包。进行三次握手的主要作用就是为了确认双方的接收能力和发送能力是否正常、指定自己的初始化序列号为后面的可靠性传送做准备。实质上其实就是连接服务器指定端口，建立TCP连接，并同步连接双方的序列号和确认号，交换TCP窗口大小信息。
 
-![image-20210313001658266](Mark_Down_Computer%20Networks.assets/image-20210313001658266.png)
+![image-20210313001658266](MarkDown_Computer%20Networks.assets/image-20210313001658266-1615731945174.png)
 
 刚开始客户端处于 Closed 的状态，服务端处于 Listen 状态。
 
@@ -92,7 +92,7 @@ TCP报文结构
 
 #### 四次挥手
 
-![image-20210313002014727](Mark_Down_Computer%20Networks.assets/image-20210313002014727.png)
+![image-20210313002014727](MarkDown_Computer%20Networks.assets/image-20210313002014727-1615731947816.png)
 
 1）客户端进程发出连接释放报文，并且停止发送数据。释放数据报文首部，FIN=1，其序列号为seq=u（等于前面已经传送过来的数据的最后一个字节的序号加1），此时，客户端进入FIN-WAIT-1（终止等待1）状态。 TCP规定，FIN报文段即使不携带数据，也要消耗一个序号。
  2）服务器收到连接释放报文，发出确认报文，ACK=1，ack=u+1，并且带上自己的序列号seq=v，此时，服务端就进入了CLOSE-WAIT（关闭等待）状态。TCP服务器通知高层的应用进程，客户端向服务器的方向就释放了，这时候处于半关闭状态，即客户端已经没有数据要发送了，但是服务器若发送数据，客户端依然要接受。这个状态还要持续一段时间，也就是整个CLOSE-WAIT状态持续的时间。
@@ -185,7 +185,7 @@ TCP（Transmission Control Protocol，传输控制协议）是面向连接的协
 
 校验和 16位
 
-![img](Mark_Down_Computer%20Networks.assets/20180901091529706)
+![img](MarkDown_Computer%20Networks.assets/20180901091529706-1615731951841)
 
 **小结TCP与UDP的区别：**
 
