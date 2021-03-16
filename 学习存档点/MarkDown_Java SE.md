@@ -2242,80 +2242,6 @@ Exception（异常）:是程序本身可以处理的异常。Exception 类有一
 
 
 
-## StackOverflowError与OutOfMemoryError区别
-
-如果在一个线程计算过程中不允许有更大的本地方法栈，那么JVM就抛出StackOverflowError
-
-
-
-```java
-package Test;
-
-import java.util.ArrayList;
-import java.util.List;
-
-public class TestError {
-    public int stackSize = 0;
-
-    public void stackSizeIncrease() {
-        stackSize++;
-        stackSizeIncrease();
-    }
-
-    public static void main(String[] args) {
-        TestError testError = new TestError();
-        try {
-            testError.stackSizeIncrease();
-        }catch (Throwable e){
-            System.out.println(testError.stackSize);
-            e.printStackTrace();
-            //31577
-            //java.lang.StackOverflowError
-            //	at Test.TestError.stackSizeIncrease(TestError.java:11)
-        }
-    }
-}
-
-```
-
-
-
-如果本地方法栈可以动态地扩展，并且本地方法栈尝试过扩展了，但是没有足够的内容分配给它，再或者没有足够的内存为线程建立初始化本地方法栈，那么JVM抛出的就是OutOfMemoryError。
-
-```java
-package Test;
-
-import java.util.ArrayList;
-import java.util.List;
-
-public class TestError {
-    List list = new ArrayList();
-    int i = 0;
-
-    public void UsedMemoryIncrease() {
-        while (true) {
-            list.add(i++);
-            list.add(list);
-        }
-    }
-
-    public static void main(String[] args) {
-        TestError testError = new TestError();
-        try {
-            testError.UsedMemoryIncrease();
-        } catch (Throwable e) {
-            System.out.println(testError.i);
-            e.printStackTrace();
-            //118278681
-            //java.lang.OutOfMemoryError: Java heap space
-        }
-    }
-}
-
-```
-
-
-
 ## 枚举
 
 ### 为什么枚举比较用 == 比用 equals 好
@@ -2403,6 +2329,901 @@ public class TestEnum {
 
 
 ## JVM
+
+
+
+### 运行时数据区域
+
+**JDK 1.8 之前：**
+
+[![img](MarkDown_Java%20SE.assets/JVM%E8%BF%90%E8%A1%8C%E6%97%B6%E6%95%B0%E6%8D%AE%E5%8C%BA%E5%9F%9F.png)](https://github.com/Snailclimb/JavaGuide/blob/master/docs/java/jvm/pictures/java内存区域/JVM运行时数据区域.png)
+
+
+
+
+
+**JDK 1.8 ：**
+
+[![img](MarkDown_Java%20SE.assets/Java%E8%BF%90%E8%A1%8C%E6%97%B6%E6%95%B0%E6%8D%AE%E5%8C%BA%E5%9F%9FJDK1.8.png)](https://github.com/Snailclimb/JavaGuide/blob/master/docs/java/jvm/pictures/java内存区域/Java运行时数据区域JDK1.8.png)
+
+
+
+**线程私有的：**
+
+- 程序计数器
+- 虚拟机栈
+- 本地方法栈
+
+**线程共享的：**
+
+- 堆
+- 方法区
+- 直接内存 (非运行时数据区的一部分)
+
+
+
+####  程序计数器
+
+程序计数器是一块较小的内存空间，可以看作是当前线程所执行的字节码的行号指示器。**字节码解释器工作时通过改变这个计数器的值来选取下一条需要执行的字节码指令，分支、循环、跳转、异常处理、线程恢复等功能都需要依赖这个计数器来完成。**
+
+另外，**为了线程切换后能恢复到正确的执行位置，每条线程都需要有一个独立的程序计数器，各线程之间计数器互不影响，独立存储，我们称这类内存区域为“线程私有”的内存。**
+
+**从上面的介绍中我们知道程序计数器主要有两个作用：**
+
+1. 字节码解释器通过改变程序计数器来依次读取指令，从而实现代码的流程控制，如：顺序执行、选择、循环、异常处理。
+2. 在多线程的情况下，程序计数器用于记录当前线程执行的位置，从而当线程被切换回来的时候能够知道该线程上次运行到哪儿了。
+
+**注意：程序计数器是唯一一个不会出现 `OutOfMemoryError` 的内存区域，它的生命周期随着线程的创建而创建，随着线程的结束而死亡。**因为程序计数器只是记录当前线程正在执行的那条字节码指令的地址，即使出现死循环都不会内存溢出
+
+
+
+#### Java 虚拟机栈
+
+**与程序计数器一样，Java 虚拟机栈也是线程私有的，它的生命周期和线程相同，描述的是 Java 方法执行的内存模型，每次方法调用的数据都是通过栈传递的。**
+
+**Java 内存可以粗糙的区分为堆内存（Heap）和栈内存 (Stack),其中栈就是现在说的虚拟机栈，或者说是虚拟机栈中局部变量表部分。** （实际上，Java 虚拟机栈是由一个个栈帧组成，而每个栈帧中都拥有：局部变量表、操作数栈、动态链接、方法出口信息。）
+
+**局部变量表主要存放了编译期可知的各种数据类型**（boolean、byte、char、short、int、float、long、double）、**对象引用**（reference 类型，它不同于对象本身，可能是一个指向对象起始地址的引用指针，也可能是指向一个代表对象的句柄或其他与此对象相关的位置）。
+
+**Java 虚拟机栈会出现两种错误：`StackOverFlowError` 和 `OutOfMemoryError`。**
+
+- **`StackOverFlowError`：** 若 Java 虚拟机栈的内存大小不允许动态扩展，那么当线程请求栈的深度超过当前 Java 虚拟机栈的最大深度的时候，就抛出 StackOverFlowError 错误。
+- **`OutOfMemoryError`：** Java 虚拟机栈的内存大小可以动态扩展， 如果虚拟机在动态扩展栈时无法申请到足够的内存空间，则抛出`OutOfMemoryError`异常异常。
+
+[![img](MarkDown_Java%20SE.assets/%E3%80%8A%E6%B7%B1%E5%85%A5%E7%90%86%E8%A7%A3%E8%99%9A%E6%8B%9F%E6%9C%BA%E3%80%8B%E7%AC%AC%E4%B8%89%E7%89%88%E7%9A%84%E7%AC%AC2%E7%AB%A0-%E8%99%9A%E6%8B%9F%E6%9C%BA%E6%A0%88.png)](https://github.com/Snailclimb/JavaGuide/blob/master/docs/java/jvm/pictures/java内存区域/《深入理解虚拟机》第三版的第2章-虚拟机栈.png)
+
+Java 虚拟机栈也是线程私有的，每个线程都有各自的 Java 虚拟机栈，而且随着线程的创建而创建，随着线程的死亡而死亡。
+
+#### StackOverflowError与OutOfMemoryError区别
+
+如果在一个线程计算过程中不允许有更大的本地方法栈，那么JVM就抛出StackOverflowError
+
+```java
+package Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class TestError {
+    public int stackSize = 0;
+
+    public void stackSizeIncrease() {
+        stackSize++;
+        stackSizeIncrease();
+    }
+
+    public static void main(String[] args) {
+        TestError testError = new TestError();
+        try {
+            testError.stackSizeIncrease();
+        }catch (Throwable e){
+            System.out.println(testError.stackSize);
+            e.printStackTrace();
+            //31577
+            //java.lang.StackOverflowError
+            //	at Test.TestError.stackSizeIncrease(TestError.java:11)
+        }
+    }
+}
+
+```
+
+
+
+如果本地方法栈可以动态地扩展，并且本地方法栈尝试过扩展了，但是没有足够的内容分配给它，再或者没有足够的内存为线程建立初始化本地方法栈，那么JVM抛出的就是OutOfMemoryError。
+
+```java
+package Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class TestError {
+    List list = new ArrayList();
+    int i = 0;
+
+    public void UsedMemoryIncrease() {
+        while (true) {
+            list.add(i++);
+            list.add(list);
+        }
+    }
+
+    public static void main(String[] args) {
+        TestError testError = new TestError();
+        try {
+            testError.UsedMemoryIncrease();
+        } catch (Throwable e) {
+            System.out.println(testError.i);
+            e.printStackTrace();
+            //118278681
+            //java.lang.OutOfMemoryError: Java heap space
+        }
+    }
+}
+
+```
+
+堆这里最容易出现的就是 OutOfMemoryError 错误，并且出现这种错误之后的表现形式还会有几种，比如：
+
+1. **`OutOfMemoryError: GC Overhead Limit Exceeded`** ： 当JVM花太多时间执行垃圾回收并且只能回收很少的堆空间时，就会发生此错误。
+2. **`java.lang.OutOfMemoryError: Java heap space`** :假如在创建新的对象时, 堆内存中的空间不足以存放新创建的对象, 就会引发`java.lang.OutOfMemoryError: Java heap space` 错误。(和本机物理内存无关，和你配置的内存大小有关！)
+
+
+
+
+
+
+
+**扩展：那么方法/函数如何调用？**
+
+Java 栈可用类比数据结构中栈，Java 栈中保存的主要内容是栈帧，每一次函数调用都会有一个对应的栈帧被压入 Java 栈，每一个函数调用结束后，都会有一个栈帧被弹出。
+
+Java 方法有两种返回方式：
+
+1. return 语句。
+2. 抛出异常。
+
+不管哪种返回方式都会导致栈帧被弹出。
+
+#### 本地方法栈
+
+和虚拟机栈所发挥的作用非常相似，区别是： **虚拟机栈为虚拟机执行 Java 方法 （也就是字节码）服务，而本地方法栈则为虚拟机使用到的 Native 方法服务。** 在 HotSpot 虚拟机中和 Java 虚拟机栈合二为一。
+
+本地方法被执行的时候，在本地方法栈也会创建一个栈帧，用于存放该本地方法的局部变量表、操作数栈、动态链接、出口信息。
+
+方法执行完毕后相应的栈帧也会出栈并释放内存空间，也会出现 `StackOverFlowError` 和 `OutOfMemoryError` 两种错误。
+
+
+
+
+
+#### 栈帧
+
+![image-20210316142233479](MarkDown_Java%20SE.assets/image-20210316142233479.png)
+
+
+
+关于「栈帧」，我们在看看《Java虚拟机规范》中的描述：
+
+栈帧是用来存储数据和部分过程结果的数据结构，同时也用来处理动态连接、方法返回值和异常分派。
+栈帧随着方法调用而创建，随着方法结束而销毁——无论方法正常完成还是异常完成都算作方法结束。
+栈帧的存储空间由创建它的线程分配在Java虚拟机栈之中，每一个栈帧都有自己的本地变量表(局部变量表)、操作数栈和指向当前方法所属的类的运行时常量池的引用。
+
+
+
+##### 局部变量表(Local Variable Table)
+
+是一组变量值存储空间，用于存放方法参数和方法内定义的局部变量。一个局部变量可以保存一个类型为boolean、byte、char、short、int、float、reference和returnAddress类型的数据。reference类型表示对一个对象实例的引用。returnAddress类型是为jsr、jsr_w和ret指令服务的，目前已经很少使用了。
+
+
+
+##### 操作数栈(Operand Stack)
+
+也常称为操作栈，它是一个后入先出栈(LIFO)。操作数栈的每一个元素可以是任意Java数据类型，32位的数据类型占一个栈容量，64位的数据类型占2个栈容量。当一个方法刚刚开始执行时，其操作数栈是空的，随着方法执行和字节码指令的执行，会从局部变量表或对象实例的字段中复制常量或变量写入到操作数栈，再随着计算的进行将栈中元素出栈到局部变量表或者返回给方法调用者，也就是出栈/入栈操作。一个完整的方法执行期间往往包含多个这样出栈/入栈的过程。
+
+
+
+##### 动态链接(Dynamic Linking)
+
+每个栈帧都保存了 一个 可以指向当前方法所在类的 运行时常量池, 目的是: 当前方法中如果需要调用其他方法的时候, 能够从运行时常量池中找到对应的符号引用, 然后将符号引用转换为直接引用,然后就能直接调用对应方法, 这就是动态链接
+
+不是所有方法调用都需要动态链接的, 有一部分符号引用会在 类加载 解析阶段, 将符号引用转换为直接引用, 这部分操作称之为: 静态解析. 就是编译期间就能确定调用的版本, 包括: 调用静态方法, 调用实例的私有构造器, 私有方法, 父类方法
+
+http://www.360doc.com/content/17/0702/18/43088713_668245796.shtml
+
+
+
+##### **方法返回**地址
+
+当一个方法开始执行时，可能有两种方式退出该方法：正常完成出口、异常完成出口
+
+正常完成出口是指方法正常完成并退出，没有抛出任何异常(包括Java虚拟机异常以及执行时通过throw语句显示抛出的异常)。如果当前方法正常完成，则根据当前方法返回的字节码指令，这时有可能会有返回值传递给方法调用者(调用它的方法)，或者无返回值。具体是否有返回值以及返回值的数据类型将根据该方法返回的字节码指令确定。
+
+异常完成出口是指方法执行过程中遇到异常，并且这个异常在方法体内部没有得到处理，导致方法退出。
+
+无论是Java虚拟机抛出的异常还是代码中使用throw指令产生的异常，只要在本方法的异常表中没有搜索到相应的异常处理器，就会导致方法退出。
+无论方法采用何种方式退出，在方法退出后都需要返回到方法被调用的位置，程序才能继续执行，方法返回时可能需要在当前栈帧中保存一些信息，用来帮他恢复它的上层方法执行状态。
+
+方法退出过程实际上就等同于把当前栈帧出栈，因此退出可以执行的操作有：恢复上层方法的局部变量表和操作数栈，把返回值(如果有的话)压如调用者的操作数栈中，调整PC计数器的值以指向方法调用指令后的下一条指令。
+ 一般来说，方法正常退出时，调用者的PC计数值可以作为返回地址，栈帧中可能保存此计数值。而方法异常退出时，返回地址是通过异常处理器表确定的，栈帧中一般不会保存此部分信息。
+
+
+
+#### 堆
+
+Java 虚拟机所管理的内存中最大的一块，Java 堆是所有线程共享的一块内存区域，在虚拟机启动时创建。**此内存区域的唯一目的就是存放对象实例，几乎所有的对象实例以及数组都在这里分配内存。**
+
+**Java世界中“几乎”所有的对象都在堆中分配，但是，随着JIT编译期的发展与逃逸分析技术逐渐成熟，栈上分配、标量替换优化技术将会导致一些微妙的变化，所有的对象都分配到堆上也渐渐变得不那么“绝对”了。从jdk 1.7开始已经默认开启逃逸分析，如果某些方法中的对象引用没有被返回或者未被外面使用（也就是未逃逸出去），那么对象可以直接在栈上分配内存。**
+
+Java 堆是垃圾收集器管理的主要区域，因此也被称作**GC 堆（Garbage Collected Heap）**.从垃圾回收的角度，由于现在收集器基本都采用分代垃圾收集算法，所以 Java 堆还可以细分为：新生代和老年代：再细致一点有：Eden 空间、From Survivor、To Survivor 空间等。**进一步划分的目的是更好地回收内存，或者更快地分配内存。**
+
+
+
+在 JDK 7 版本及JDK 7 版本之前，堆内存被通常被分为下面三部分：
+
+1. 新生代内存(Young Generation)
+2. 老生代(Old Generation)
+3. 永生代(Permanent Generation)
+
+[![JVM堆内存结构-JDK7](MarkDown_Java%20SE.assets/JVM%E5%A0%86%E5%86%85%E5%AD%98%E7%BB%93%E6%9E%84-JDK7.png)](https://github.com/Snailclimb/JavaGuide/blob/master/docs/java/jvm/pictures/java内存区域/JVM堆内存结构-JDK7.png)
+
+JDK 8 版本之后方法区（HotSpot 的永久代）被彻底移除了（JDK1.7 就已经开始了），取而代之是元空间，元空间使用的是直接内存。
+
+[![JVM堆内存结构-JDK8](MarkDown_Java%20SE.assets/JVM%E5%A0%86%E5%86%85%E5%AD%98%E7%BB%93%E6%9E%84-jdk8.png)](https://github.com/Snailclimb/JavaGuide/blob/master/docs/java/jvm/pictures/java内存区域/JVM堆内存结构-jdk8.png)
+
+**上图所示的 Eden 区、两个 Survivor 区都属于新生代（为了区分，这两个 Survivor 区域按照顺序被命名为 from 和 to），中间一层属于老年代。**
+
+大部分情况，对象都会首先在 Eden 区域分配，在一次新生代垃圾回收后，如果对象还存活，则会进入 s0 或者 s1，并且对象的年龄还会加 1(Eden 区->Survivor 区后对象的初始年龄变为 1)，当它的年龄增加到一定程度（默认为 15 岁），就会被晋升到老年代中。对象晋升到老年代的年龄阈值，可以通过参数 `-XX:MaxTenuringThreshold` 来设置。
+
+> 修正（[issue552](https://github.com/Snailclimb/JavaGuide/issues/552)）：“Hotspot遍历所有对象时，按照年龄从小到大对其所占用的大小进行累积，当累积的某个年龄大小超过了survivor区的一半时，取这个年龄和MaxTenuringThreshold中更小的一个值，作为新的晋升年龄阈值”。
+>
+> **动态年龄计算的代码如下**
+>
+> ```
+> uint ageTable::compute_tenuring_threshold(size_t survivor_capacity) {
+> 	//survivor_capacity是survivor空间的大小
+>   size_t desired_survivor_size = (size_t)((((double) survivor_capacity)*TargetSurvivorRatio)/100);
+>   size_t total = 0;
+>   uint age = 1;
+>   while (age < table_size) {
+>     total += sizes[age];//sizes数组是每个年龄段对象大小
+>     if (total > desired_survivor_size) break;
+>     age++;
+>   }
+>   uint result = age < MaxTenuringThreshold ? age : MaxTenuringThreshold;
+> 	...
+> }
+> ```
+
+堆这里最容易出现的就是 OutOfMemoryError 错误，并且出现这种错误之后的表现形式还会有几种，比如：
+
+1. **`OutOfMemoryError: GC Overhead Limit Exceeded`** ： 当JVM花太多时间执行垃圾回收并且只能回收很少的堆空间时，就会发生此错误。
+2. **`java.lang.OutOfMemoryError: Java heap space`** :假如在创建新的对象时, 堆内存中的空间不足以存放新创建的对象, 就会引发`java.lang.OutOfMemoryError: Java heap space` 错误。(和本机物理内存无关，和你配置的内存大小有关！)
+
+
+
+#### 方法区
+
+方法区与 Java 堆一样，是各个线程共享的内存区域，它用于存储已被虚拟机加载的类信息、常量、静态变量、即时编译器编译后的代码等数据。虽然 **Java 虚拟机规范把方法区描述为堆的一个逻辑部分**，但是它却有一个别名叫做 **Non-Heap（非堆）**，目的应该是与 Java 堆区分开来。
+
+方法区也被称为永久代。很多人都会分不清方法区和永久代的关系，为此我也查阅了文献。
+
+##### 1 方法区和永久代的关系
+
+> 《Java 虚拟机规范》只是规定了有方法区这么个概念和它的作用，并没有规定如何去实现它。那么，在不同的 JVM 上方法区的实现肯定是不同的了。 **方法区和永久代的关系很像 Java 中接口和类的关系，类实现了接口，而永久代就是 HotSpot 虚拟机对虚拟机规范中方法区的一种实现方式。** 也就是说，永久代是 HotSpot 的概念，方法区是 Java 虚拟机规范中的定义，是一种规范，而永久代是一种实现，一个是标准一个是实现，其他的虚拟机实现并没有永久代这一说法。
+
+##### 2 常用参数
+
+JDK 1.8 之前永久代还没被彻底移除的时候通常通过下面这些参数来调节方法区大小
+
+```
+-XX:PermSize=N //方法区 (永久代) 初始大小
+-XX:MaxPermSize=N //方法区 (永久代) 最大大小,超过这个值将会抛出 OutOfMemoryError 异常:java.lang.OutOfMemoryError: PermGen
+```
+
+相对而言，垃圾收集行为在这个区域是比较少出现的，但并非数据进入方法区后就“永久存在”了。
+
+JDK 1.8 的时候，方法区（HotSpot 的永久代）被彻底移除了（JDK1.7 就已经开始了），取而代之是元空间，元空间使用的是直接内存。
+
+下面是一些常用参数：
+
+```
+-XX:MetaspaceSize=N //设置 Metaspace 的初始（和最小大小）
+-XX:MaxMetaspaceSize=N //设置 Metaspace 的最大大小
+```
+
+与永久代很大的不同就是，如果不指定大小的话，随着更多类的创建，虚拟机会耗尽所有可用的系统内存。
+
+##### 3 为什么要将永久代 (PermGen) 替换为元空间 (MetaSpace) 呢?
+
+1. 整个永久代有一个 JVM 本身设置固定大小上限，无法进行调整，而元空间使用的是直接内存，受本机可用内存的限制，虽然元空间仍旧可能溢出，但是比原来出现的几率会更小。
+
+> 当你元空间溢出时会得到如下错误： `java.lang.OutOfMemoryError: MetaSpace`
+
+你可以使用 `-XX：MaxMetaspaceSize` 标志设置最大元空间大小，默认值为 unlimited，这意味着它只受系统内存的限制。`-XX：MetaspaceSize` 调整标志定义元空间的初始大小如果未指定此标志，则 Metaspace 将根据运行时的应用程序需求动态地重新调整大小。元空间里面存放的是类的元数据，这样加载多少类的元数据就不由 `MaxPermSize` 控制了, 而由系统的实际可用空间来控制，这样能加载的类就更多了。
+
+
+
+#### 运行时常量池
+
+运行时常量池是方法区的一部分。Class 文件中除了有类的版本、字段、方法、接口等描述信息外，还有常量池表（用于存放编译期生成的各种字面量和符号引用）
+
+既然运行时常量池是方法区的一部分，自然受到方法区内存的限制，当常量池无法再申请到内存时会抛出 OutOfMemoryError 错误。
+
+1. **JDK1.7之前运行时常量池逻辑包含字符串常量池存放在方法区, 此时hotspot虚拟机对方法区的实现为永久代**
+2. **JDK1.7 字符串常量池被从方法区拿到了堆中, 这里没有提到运行时常量池,也就是说字符串常量池被单独拿到堆,运行时常量池剩下的东西还在方法区, 也就是hotspot中的永久代** 。
+3. **JDK1.8 hotspot移除了永久代用元空间(Metaspace)取而代之, 这时候字符串常量池还在堆, 运行时常量池还在方法区, 只不过方法区的实现从永久代变成了元空间(Metaspace)**
+
+#### 直接内存
+
+**直接内存并不是虚拟机运行时数据区的一部分，也不是虚拟机规范中定义的内存区域，但是这部分内存也被频繁地使用。而且也可能导致 OutOfMemoryError 错误出现。**
+
+JDK1.4 中新加入的 **NIO(New Input/Output) 类**，引入了一种基于**通道（Channel）** 与**缓存区（Buffer）** 的 I/O 方式，它可以直接使用 Native 函数库直接分配堆外内存，然后通过一个存储在 Java 堆中的 DirectByteBuffer 对象作为这块内存的引用进行操作。这样就能在一些场景中显著提高性能，因为**避免了在 Java 堆和 Native 堆之间来回复制数据**。
+
+本机直接内存的分配不会受到 Java 堆的限制，但是，既然是内存就会受到本机总内存大小以及处理器寻址空间的限制。
+
+
+
+### HotSpot 虚拟机对象探秘
+
+
+
+#### 对象的创建
+
+下图便是 Java 对象的创建过程，我建议最好是能默写出来，并且要掌握每一步在做什么。 [![Java创建对象的过程](MarkDown_Java%20SE.assets/Java%E5%88%9B%E5%BB%BA%E5%AF%B9%E8%B1%A1%E7%9A%84%E8%BF%87%E7%A8%8B.png)](https://github.com/Snailclimb/JavaGuide/blob/master/docs/java/jvm/pictures/java内存区域/Java创建对象的过程.png)
+
+##### Step1:类加载检查
+
+虚拟机遇到一条 new 指令时，首先将去检查这个指令的参数是否能在常量池中定位到这个类的符号引用，并且检查这个符号引用代表的类是否已被加载过、解析和初始化过。如果没有，那必须先执行相应的类加载过程。
+
+
+
+##### Step2:分配内存
+
+在**类加载检查**通过后，接下来虚拟机将为新生对象**分配内存**。对象所需的内存大小在类加载完成后便可确定，为对象分配空间的任务等同于把一块确定大小的内存从 Java 堆中划分出来。**分配方式**有 **“指针碰撞”** 和 **“空闲列表”** 两种，**选择哪种分配方式由 Java 堆是否规整决定，而 Java 堆是否规整又由所采用的垃圾收集器是否带有压缩整理功能决定**。
+
+**内存分配的两种方式：（补充内容，需要掌握）**
+
+选择以上两种方式中的哪一种，取决于 Java 堆内存是否规整。而 Java 堆内存是否规整，取决于 GC 收集器的算法是"标记-清除"，还是"标记-整理"（也称作"标记-压缩"），值得注意的是，复制算法内存也是规整的
+
+[![内存分配的两种方式](MarkDown_Java%20SE.assets/%E5%86%85%E5%AD%98%E5%88%86%E9%85%8D%E7%9A%84%E4%B8%A4%E7%A7%8D%E6%96%B9%E5%BC%8F.png)](https://github.com/Snailclimb/JavaGuide/blob/master/docs/java/jvm/pictures/java内存区域/内存分配的两种方式.png)
+
+**内存分配并发问题（补充内容，需要掌握）**
+
+在创建对象的时候有一个很重要的问题，就是线程安全，因为在实际开发过程中，创建对象是很频繁的事情，作为虚拟机来说，必须要保证线程是安全的，通常来讲，虚拟机采用两种方式来保证线程安全：
+
+- **CAS+失败重试：** CAS 是乐观锁的一种实现方式。所谓乐观锁就是，每次不加锁而是假设没有冲突而去完成某项操作，如果因为冲突失败就重试，直到成功为止。**虚拟机采用 CAS 配上失败重试的方式保证更新操作的原子性。**
+- **TLAB：** 为每一个线程预先在 Eden 区分配一块儿内存，JVM 在给线程中的对象分配内存时，首先在 TLAB 分配，当对象大于 TLAB 中的剩余内存或 TLAB 的内存已用尽时，再采用上述的 CAS 进行内存分配
+
+
+
+##### Step3:初始化零值
+
+内存分配完成后，虚拟机需要将分配到的内存空间都初始化为零值（不包括对象头），这一步操作保证了对象的实例字段在 Java 代码中可以不赋初始值就直接使用，程序能访问到这些字段的数据类型所对应的零值。
+
+
+
+##### Step4:设置对象头
+
+初始化零值完成之后，**虚拟机要对对象进行必要的设置**，例如这个对象是哪个类的实例、如何才能找到类的元数据信息、对象的哈希码、对象的 GC 分代年龄等信息。 **这些信息存放在对象头中。** 另外，根据虚拟机当前运行状态的不同，如是否启用偏向锁等，对象头会有不同的设置方式。
+
+
+
+##### Step5:执行 init 方法
+
+在上面工作都完成之后，从虚拟机的视角来看，一个新的对象已经产生了，但从 Java 程序的视角来看，对象创建才刚开始，`<init>` 方法还没有执行，所有的字段都还为零。所以一般来说，执行 new 指令之后会接着执行 `<init>` 方法，把对象按照程序员的意愿进行初始化，这样一个真正可用的对象才算完全产生出来。
+
+
+
+#### 对象的内存布局
+
+在 Hotspot 虚拟机中，对象在内存中的布局可以分为 3 块区域：**对象头**、**实例数据**和**对齐填充**。
+
+**Hotspot 虚拟机的对象头包括两部分信息**，**第一部分用于存储对象自身的运行时数据**（哈希码、GC 分代年龄、锁状态标志等等），**另一部分是类型指针**，即对象指向它的类元数据的指针，虚拟机通过这个指针来确定这个对象是哪个类的实例。
+
+**实例数据部分是对象真正存储的有效信息**，也是在程序中所定义的各种类型的字段内容。
+
+**对齐填充部分不是必然存在的，也没有什么特别的含义，仅仅起占位作用。** 因为 Hotspot 虚拟机的自动内存管理系统要求对象起始地址必须是 8 字节的整数倍，换句话说就是对象的大小必须是 8 字节的整数倍。而对象头部分正好是 8 字节的倍数（1 倍或 2 倍），因此，当对象实例数据部分没有对齐时，就需要通过对齐填充来补全。
+
+
+
+#### 对象的访问定位
+
+建立对象就是为了使用对象，我们的 Java 程序通过栈上的 reference 数据来操作堆上的具体对象。对象的访问方式由虚拟机实现而定，目前主流的访问方式有**①使用句柄**和**②直接指针**两种：
+
+1. **句柄：** 如果使用句柄的话，那么 Java 堆中将会划分出一块内存来作为句柄池，reference 中存储的就是对象的句柄地址，而句柄中包含了对象实例数据与类型数据各自的具体地址信息；
+
+   [![对象的访问定位-使用句柄](MarkDown_Java%20SE.assets/%E5%AF%B9%E8%B1%A1%E7%9A%84%E8%AE%BF%E9%97%AE%E5%AE%9A%E4%BD%8D-%E4%BD%BF%E7%94%A8%E5%8F%A5%E6%9F%84.png)](https://github.com/Snailclimb/JavaGuide/blob/master/docs/java/jvm/pictures/java内存区域/对象的访问定位-使用句柄.png)
+
+2. **直接指针：** 如果使用直接指针访问，那么 Java 堆对象的布局中就必须考虑如何放置访问类型数据的相关信息，而 reference 中存储的直接就是对象的地址。
+
+[![对象的访问定位-直接指针](MarkDown_Java%20SE.assets/%E5%AF%B9%E8%B1%A1%E7%9A%84%E8%AE%BF%E9%97%AE%E5%AE%9A%E4%BD%8D-%E7%9B%B4%E6%8E%A5%E6%8C%87%E9%92%88.png)](https://github.com/Snailclimb/JavaGuide/blob/master/docs/java/jvm/pictures/java内存区域/对象的访问定位-直接指针.png)
+
+**这两种对象访问方式各有优势。使用句柄来访问的最大好处是 reference 中存储的是稳定的句柄地址，在对象被移动时只会改变句柄中的实例数据指针，而 reference 本身不需要修改。使用直接指针访问方式最大的好处就是速度快，它节省了一次指针定位的时间开销。**
+
+
+
+### String 类和常量池
+
+**String 对象的两种创建方式：**
+
+```
+String str1 = "abcd";//先检查字符串常量池中有没有"abcd"，如果字符串常量池中没有，则创建一个，然后 str1 指向字符串常量池中的对象，如果有，则直接将 str1 指向"abcd""；
+String str2 = new String("abcd");//堆中创建一个新的对象
+String str3 = new String("abcd");//堆中创建一个新的对象
+System.out.println(str1==str2);//false
+System.out.println(str2==str3);//false
+```
+
+这两种不同的创建方法是有差别的。
+
+- 第一种方式是在常量池中拿对象；
+- 第二种方式是直接在堆内存空间创建一个新的对象。
+
+记住一点：**只要使用 new 方法，便需要创建新的对象。**
+
+再给大家一个图应该更容易理解，图片来源：https://www.journaldev.com/797/what-is-java-string-pool：
+
+[![String-Pool-Java](MarkDown_Java%20SE.assets/2019-3String-Pool-Java1-450x249.png)](https://github.com/Snailclimb/JavaGuide/blob/master/docs/java/jvm/pictures/java内存区域/2019-3String-Pool-Java1-450x249.png)
+
+**String 类型的常量池比较特殊。它的主要使用方法有两种：**
+
+- 直接使用双引号声明出来的 String 对象会直接存储在常量池中。
+- 如果不是用双引号声明的 String 对象，可以使用 String 提供的 intern 方法。String.intern() 是一个 Native 方法，它的作用是：如果运行时常量池中已经包含一个等于此 String 对象内容的字符串，则返回常量池中该字符串的引用；如果没有，JDK1.7之前（不包含1.7）的处理方式是在常量池中创建与此 String 内容相同的字符串，并返回常量池中创建的字符串的引用，JDK1.7以及之后的处理方式是在常量池中记录此字符串的引用，并返回该引用。
+
+```
+	      String s1 = new String("计算机");
+	      String s2 = s1.intern();
+	      String s3 = "计算机";
+	      System.out.println(s2);//计算机
+	      System.out.println(s1 == s2);//false，因为一个是堆内存中的 String 对象一个是常量池中的 String 对象，
+	      System.out.println(s3 == s2);//true，因为两个都是常量池中的 String 对象
+```
+
+
+
+**字符串拼接:**
+
+```
+		  String str1 = "str";
+		  String str2 = "ing";
+		 
+		  String str3 = "str" + "ing";//常量池中的对象
+		  String str4 = str1 + str2; //在堆上创建的新的对象	  
+		  String str5 = "string";//常量池中的对象
+		  System.out.println(str3 == str4);//false
+		  System.out.println(str3 == str5);//true
+		  System.out.println(str4 == str5);//false
+```
+
+[![字符串拼接](MarkDown_Java%20SE.assets/%E5%AD%97%E7%AC%A6%E4%B8%B2%E6%8B%BC%E6%8E%A5-%E5%B8%B8%E9%87%8F%E6%B1%A02.png)](https://github.com/Snailclimb/JavaGuide/blob/master/docs/java/jvm/pictures/java内存区域/字符串拼接-常量池2.png)
+
+尽量避免多个字符串拼接，因为这样会重新创建对象。如果需要改变字符串的话，可以使用 StringBuilder 或者 StringBuffer。
+
+#### String s1 = new String("abc");这句话创建了几个字符串对象？
+
+将创建 1 或 2 个字符串。如果池中已存在字符串常量“abc”，则只会在堆空间创建一个字符串常量“abc”。如果池中没有字符串常量“abc”，那么它将首先在池中创建，然后在堆空间中创建，因此将创建总共 2 个字符串对象。
+
+**验证：**
+
+```
+		String s1 = new String("abc");// 堆内存的地址值
+		String s2 = "abc";
+		System.out.println(s1 == s2);// 输出 false,因为一个是堆内存，一个是常量池的内存，故两者是不同的。
+		System.out.println(s1.equals(s2));// 输出 true
+```
+
+**结果：**
+
+```
+false
+true
+```
+
+
+
+### 8 种基本类型的包装类和常量池
+
+**Java 基本类型的包装类的大部分都实现了常量池技术，即 Byte,Short,Integer,Long,Character,Boolean；前面 4 种包装类默认创建了数值[-128，127] 的相应类型的缓存数据，Character创建了数值在[0,127]范围的缓存数据，Boolean 直接返回True Or False。如果超出对应范围仍然会去创建新的对象。** 为啥把缓存设置为[-128，127]区间？（[参见issue/461](https://github.com/Snailclimb/JavaGuide/issues/461)）性能和资源之间的权衡。
+
+```
+public static Boolean valueOf(boolean b) {
+    return (b ? TRUE : FALSE);
+}
+private static class CharacterCache {         
+    private CharacterCache(){}
+          
+    static final Character cache[] = new Character[127 + 1];          
+    static {             
+        for (int i = 0; i < cache.length; i++)                 
+            cache[i] = new Character((char)i);         
+    }   
+}
+```
+
+两种浮点数类型的包装类 Float,Double 并没有实现常量池技术。
+
+```
+		Integer i1 = 33;
+		Integer i2 = 33;
+		System.out.println(i1 == i2);// 输出 true
+		Integer i11 = 333;
+		Integer i22 = 333;
+		System.out.println(i11 == i22);// 输出 false
+		Double i3 = 1.2;
+		Double i4 = 1.2;
+		System.out.println(i3 == i4);// 输出 false
+```
+
+
+
+#### **Integer 缓存源代码：**
+
+```
+/**
+*此方法将始终缓存-128 到 127（包括端点）范围内的值，并可以缓存此范围之外的其他值。
+*/
+    public static Integer valueOf(int i) {
+        if (i >= IntegerCache.low && i <= IntegerCache.high)
+            return IntegerCache.cache[i + (-IntegerCache.low)];
+        return new Integer(i);
+    }
+```
+
+**应用场景：**
+
+1. Integer i1=40；Java 在编译的时候会直接将代码封装成 Integer i1=Integer.valueOf(40);，从而使用常量池中的对象。
+2. Integer i1 = new Integer(40);这种情况下会创建新的对象。
+
+```
+  Integer i1 = 40;
+  Integer i2 = new Integer(40);
+  System.out.println(i1==i2);//输出 false
+```
+
+**Integer 比较更丰富的一个例子:**
+
+```
+  Integer i1 = 40;
+  Integer i2 = 40;
+  Integer i3 = 0;
+  Integer i4 = new Integer(40);
+  Integer i5 = new Integer(40);
+  Integer i6 = new Integer(0);
+  
+  System.out.println("i1=i2   " + (i1 == i2));
+  System.out.println("i1=i2+i3   " + (i1 == i2 + i3));
+  System.out.println("i1=i4   " + (i1 == i4));
+  System.out.println("i4=i5   " + (i4 == i5));
+  System.out.println("i4=i5+i6   " + (i4 == i5 + i6));   
+  System.out.println("40=i5+i6   " + (40 == i5 + i6));     
+```
+
+结果：
+
+```
+i1=i2   true
+i1=i2+i3   true
+i1=i4   false
+i4=i5   false
+i4=i5+i6   true
+40=i5+i6   true
+```
+
+解释：
+
+语句 i4 == i5 + i6，因为+这个操作符不适用于 Integer 对象，首先 i5 和 i6 进行自动拆箱操作，进行数值相加，即 i4 == 40。然后 Integer 对象无法与数值进行直接比较，所以 i4 自动拆箱转为 int 值 40，最终这条语句转为 40 == 40 进行数值比较。
+
+
+
+
+
+
+
+### GC垃圾回收
+
+Java 的自动内存管理主要是针对对象内存的回收和对象内存的分配。同时，Java 自动内存管理最核心的功能是 **堆** 内存中对象的分配与回收。
+
+Java 堆是垃圾收集器管理的主要区域，因此也被称作**GC 堆（Garbage Collected Heap）**.从垃圾回收的角度，由于现在收集器基本都采用分代垃圾收集算法，所以 Java 堆还可以细分为：新生代和老年代：再细致一点有：Eden 空间、From Survivor、To Survivor 空间等。**进一步划分的目的是更好地回收内存，或者更快地分配内存。**
+
+**堆空间的基本结构：**
+
+[![img](MarkDown_Java%20SE.assets/01d330d8-2710-4fad-a91c-7bbbfaaefc0e.png)](https://github.com/Snailclimb/JavaGuide/blob/master/docs/java/jvm/pictures/jvm垃圾回收/01d330d8-2710-4fad-a91c-7bbbfaaefc0e.png)
+
+上图所示的 Eden 区、From Survivor0("From") 区、To Survivor1("To") 区都属于新生代，Old Memory 区属于老年代。
+
+大部分情况，对象都会首先在 Eden 区域分配，在一次新生代垃圾回收后，如果对象还存活，则会进入 s0 或者 s1，并且对象的年龄还会加 1(Eden 区->Survivor 区后对象的初始年龄变为 1)，当它的年龄增加到一定程度（默认为 15 岁），就会被晋升到老年代中。对象晋升到老年代的年龄阈值，可以通过参数 `-XX:MaxTenuringThreshold` 来设置。
+
+> 修正（[issue552](https://github.com/Snailclimb/JavaGuide/issues/552)）：“Hotspot 遍历所有对象时，按照年龄从小到大对其所占用的大小进行累积，当累积的某个年龄大小超过了 survivor 区的一半时，取这个年龄和 MaxTenuringThreshold 中更小的一个值，作为新的晋升年龄阈值”。
+>
+> **动态年龄计算的代码如下**
+>
+> ```java
+> uint ageTable::compute_tenuring_threshold(size_t survivor_capacity) {
+>     //survivor_capacity是survivor空间的大小
+>     size_t desired_survivor_size = (size_t)((((double)survivor_capacity)*TargetSurvivorRatio)/100);
+>     size_t total = 0;
+>     uint age = 1;
+>     while (age < table_size) {
+>         //sizes数组是每个年龄段对象大小
+>         total += sizes[age];
+>         if (total > desired_survivor_size) {
+>             break;
+>         }
+>         age++;
+>     }
+>     uint result = age < MaxTenuringThreshold ? age : MaxTenuringThreshold;
+>     ...
+> }
+> ```
+
+经过这次 GC 后，Eden 区和"From"区已经被清空。这个时候，"From"和"To"会交换他们的角色，也就是新的"To"就是上次 GC 前的“From”，新的"From"就是上次 GC 前的"To"。不管怎样，都会保证名为 To 的 Survivor 区域是空的。Minor GC 会一直重复这样的过程，直到“To”区被填满，"To"区被填满之后，会将所有对象移动到老年代中。
+
+[![堆内存常见分配策略 ](MarkDown_Java%20SE.assets/%E5%A0%86%E5%86%85%E5%AD%98.png)](https://github.com/Snailclimb/JavaGuide/blob/master/docs/java/jvm/pictures/jvm垃圾回收/堆内存.png)
+
+
+
+#### 1.1 对象优先在 eden 区分配
+
+目前主流的垃圾收集器都会采用分代回收算法，因此需要将堆内存分为新生代和老年代，这样我们就可以根据各个年代的特点选择合适的垃圾收集算法。
+
+大多数情况下，对象在新生代中 eden 区分配。当 eden 区没有足够空间进行分配时，虚拟机将发起一次 Minor GC.
+
+
+
+#### 1.2 大对象直接进入老年代
+
+大对象就是需要大量连续内存空间的对象（比如：字符串、数组）。
+
+**为什么要这样呢？**
+
+为了避免为大对象分配内存时由于分配担保机制带来的复制而降低效率。
+
+
+
+#### 1.3 长期存活的对象将进入老年代
+
+既然虚拟机采用了分代收集的思想来管理内存，那么内存回收时就必须能识别哪些对象应放在新生代，哪些对象应放在老年代中。为了做到这一点，虚拟机给每个对象一个对象年龄（Age）计数器。
+
+如果对象在 Eden 出生并经过第一次 Minor GC 后仍然能够存活，并且能被 Survivor 容纳的话，将被移动到 Survivor 空间中，并将对象年龄设为 1.对象在 Survivor 中每熬过一次 MinorGC,年龄就增加 1 岁，当它的年龄增加到一定程度（默认为 15 岁），就会被晋升到老年代中。对象晋升到老年代的年龄阈值，可以通过参数 `-XX:MaxTenuringThreshold` 来设置。
+
+
+
+#### 1.4 动态对象年龄判定
+
+大部分情况，对象都会首先在 Eden 区域分配，在一次新生代垃圾回收后，如果对象还存活，则会进入 s0 或者 s1，并且对象的年龄还会加 1(Eden 区->Survivor 区后对象的初始年龄变为 1)，当它的年龄增加到一定程度（默认为 15 岁），就会被晋升到老年代中。对象晋升到老年代的年龄阈值，可以通过参数 `-XX:MaxTenuringThreshold` 来设置。
+
+> 修正（[issue552](https://github.com/Snailclimb/JavaGuide/issues/552)）：“Hotspot 遍历所有对象时，按照年龄从小到大对其所占用的大小进行累积，当累积的某个年龄大小超过了 survivor 区的一半时，取这个年龄和 MaxTenuringThreshold 中更小的一个值，作为新的晋升年龄阈值”。
+>
+> **动态年龄计算的代码如下**
+>
+> ```
+> uint ageTable::compute_tenuring_threshold(size_t survivor_capacity) {
+>     //survivor_capacity是survivor空间的大小
+>     size_t desired_survivor_size = (size_t)((((double)survivor_capacity)*TargetSurvivorRatio)/100);
+>     size_t total = 0;
+>     uint age = 1;
+>     while (age < table_size) {
+>         //sizes数组是每个年龄段对象大小
+>         total += sizes[age];
+>         if (total > desired_survivor_size) {
+>             break;
+>         }
+>         age++;
+>     }
+>     uint result = age < MaxTenuringThreshold ? age : MaxTenuringThreshold;
+>     ...
+> }
+> ```
+>
+> 额外补充说明([issue672](https://github.com/Snailclimb/JavaGuide/issues/672))：**关于默认的晋升年龄是 15，这个说法的来源大部分都是《深入理解 Java 虚拟机》这本书。** 如果你去 Oracle 的官网阅读[相关的虚拟机参数](https://docs.oracle.com/javase/8/docs/technotes/tools/unix/java.html)，你会发现`-XX:MaxTenuringThreshold=threshold`这里有个说明
+>
+> **Sets the maximum tenuring threshold for use in adaptive GC sizing. The largest value is 15. The default value is 15 for the parallel (throughput) collector, and 6 for the CMS collector.默认晋升年龄并不都是 15，这个是要区分垃圾收集器的，CMS 就是 6.**
+
+
+
+#### 1.5 主要进行 gc 的区域
+
+周志明先生在《深入理解 Java 虚拟机》第二版中 P92 如是写道：
+
+![image-20210316161642557](MarkDown_Java%20SE.assets/image-20210316161642557.png)
+
+
+
+#### 2 对象已经死亡？
+
+堆中几乎放着所有的对象实例，对堆垃圾回收前的第一步就是要判断哪些对象已经死亡（即不能再被任何途径使用的对象）。
+
+[![img](MarkDown_Java%20SE.assets/11034259.png)](https://github.com/Snailclimb/JavaGuide/blob/master/docs/java/jvm/pictures/jvm垃圾回收/11034259.png)
+
+
+
+#### 2.1 引用计数法
+
+给对象中添加一个引用计数器，每当有一个地方引用它，计数器就加 1；当引用失效，计数器就减 1；任何时候计数器为 0 的对象就是不可能再被使用的。
+
+**这个方法实现简单，效率高，但是目前主流的虚拟机中并没有选择这个算法来管理内存，其最主要的原因是它很难解决对象之间相互循环引用的问题。** 所谓对象之间的相互引用问题，如下面代码所示：除了对象 objA 和 objB 相互引用着对方之外，这两个对象之间再无任何引用。但是他们因为互相引用对方，导致它们的引用计数器都不为 0，于是引用计数算法无法通知 GC 回收器回收他们。
+
+```
+public class ReferenceCountingGc {
+    Object instance = null;
+	public static void main(String[] args) {
+		ReferenceCountingGc objA = new ReferenceCountingGc();
+		ReferenceCountingGc objB = new ReferenceCountingGc();
+		objA.instance = objB;
+		objB.instance = objA;
+		objA = null;
+		objB = null;
+
+	}
+}
+```
+
+#### 2.2 可达性分析算法
+
+这个算法的基本思想就是通过一系列的称为 **“GC Roots”** 的对象作为起点，从这些节点开始向下搜索，节点所走过的路径称为引用链，当一个对象到 GC Roots 没有任何引用链相连的话，则证明此对象是不可用的。
+
+[![可达性分析算法 ](MarkDown_Java%20SE.assets/72762049.png)](https://github.com/Snailclimb/JavaGuide/blob/master/docs/java/jvm/pictures/jvm垃圾回收/72762049.png)
+
+可作为 GC Roots 的对象包括下面几种:
+
+- 虚拟机栈(栈帧中的本地变量表)中引用的对象
+- 本地方法栈(Native 方法)中引用的对象
+- 方法区中类静态属性引用的对象
+- 方法区中常量引用的对象
+- 所有被同步锁持有的对象
+
+
+
+#### 2.3 再谈引用
+
+无论是通过引用计数法判断对象引用数量，还是通过可达性分析法判断对象的引用链是否可达，判定对象的存活都与“引用”有关。
+
+JDK1.2 之前，Java 中引用的定义很传统：如果 reference 类型的数据存储的数值代表的是另一块内存的起始地址，就称这块内存代表一个引用。
+
+JDK1.2 以后，Java 对引用的概念进行了扩充，将引用分为强引用、软引用、弱引用、虚引用四种（引用强度逐渐减弱）
+
+**1．强引用（StrongReference）**
+
+以前我们使用的大部分引用实际上都是强引用，这是使用最普遍的引用。如果一个对象具有强引用，那就类似于**必不可少的生活用品**，垃圾回收器绝不会回收它。当内存空间不足，Java 虚拟机宁愿抛出 OutOfMemoryError 错误，使程序异常终止，也不会靠随意回收具有强引用的对象来解决内存不足问题。
+
+**2．软引用（SoftReference）**
+
+如果一个对象只具有软引用，那就类似于**可有可无的生活用品**。如果内存空间足够，垃圾回收器就不会回收它，如果内存空间不足了，就会回收这些对象的内存。只要垃圾回收器没有回收它，该对象就可以被程序使用。软引用可用来实现内存敏感的高速缓存。
+
+软引用可以和一个引用队列（ReferenceQueue）联合使用，如果软引用所引用的对象被垃圾回收，JAVA 虚拟机就会把这个软引用加入到与之关联的引用队列中。
+
+**3．弱引用（WeakReference）**
+
+如果一个对象只具有弱引用，那就类似于**可有可无的生活用品**。弱引用与软引用的区别在于：只具有弱引用的对象拥有更短暂的生命周期。在垃圾回收器线程扫描它所管辖的内存区域的过程中，一旦发现了只具有弱引用的对象，不管当前内存空间足够与否，都会回收它的内存。不过，由于垃圾回收器是一个优先级很低的线程， 因此不一定会很快发现那些只具有弱引用的对象。
+
+弱引用可以和一个引用队列（ReferenceQueue）联合使用，如果弱引用所引用的对象被垃圾回收，Java 虚拟机就会把这个弱引用加入到与之关联的引用队列中。
+
+**4．虚引用（PhantomReference）**
+
+"虚引用"顾名思义，就是形同虚设，与其他几种引用都不同，虚引用并不会决定对象的生命周期。如果一个对象仅持有虚引用，那么它就和没有任何引用一样，在任何时候都可能被垃圾回收。
+
+**虚引用主要用来跟踪对象被垃圾回收的活动**。
+
+**虚引用与软引用和弱引用的一个区别在于：** 虚引用必须和引用队列（ReferenceQueue）联合使用。当垃圾回收器准备回收一个对象时，如果发现它还有虚引用，就会在回收对象的内存之前，把这个虚引用加入到与之关联的引用队列中。程序可以通过判断引用队列中是否已经加入了虚引用，来了解被引用的对象是否将要被垃圾回收。程序如果发现某个虚引用已经被加入到引用队列，那么就可以在所引用的对象的内存被回收之前采取必要的行动。
+
+特别注意，在程序设计中一般很少使用弱引用与虚引用，使用软引用的情况较多，这是因为**软引用可以加速 JVM 对垃圾内存的回收速度，可以维护系统的运行安全，防止内存溢出（OutOfMemory）等问题的产生**。
+
+#### 2.4 不可达的对象并非“非死不可”
+
+即使在可达性分析法中不可达的对象，也并非是“非死不可”的，这时候它们暂时处于“缓刑阶段”，要真正宣告一个对象死亡，至少要经历两次标记过程；可达性分析法中不可达的对象被第一次标记并且进行一次筛选，筛选的条件是此对象是否有必要执行 finalize 方法。当对象没有覆盖 finalize 方法，或 finalize 方法已经被虚拟机调用过时，虚拟机将这两种情况视为没有必要执行。
+
+被判定为需要执行的对象将会被放在一个队列中进行第二次标记，除非这个对象与引用链上的任何一个对象建立关联，否则就会被真的回收。
+
+
+
+#### 2.5 如何判断一个常量是废弃常量？
+
+运行时常量池主要回收的是废弃的常量。那么，我们如何判断一个常量是废弃常量呢？
+
+1. **JDK1.7 之前运行时常量池逻辑包含字符串常量池存放在方法区, 此时 hotspot 虚拟机对方法区的实现为永久代**
+2. **JDK1.7 字符串常量池被从方法区拿到了堆中, 这里没有提到运行时常量池,也就是说字符串常量池被单独拿到堆,运行时常量池剩下的东西还在方法区, 也就是 hotspot 中的永久代** 。
+3. **JDK1.8 hotspot 移除了永久代用元空间(Metaspace)取而代之, 这时候字符串常量池还在堆, 运行时常量池还在方法区, 只不过方法区的实现从永久代变成了元空间(Metaspace)**
+
+假如在字符串常量池中存在字符串 "abc"，如果当前没有任何 String 对象引用该字符串常量的话，就说明常量 "abc" 就是废弃常量，如果这时发生内存回收的话而且有必要的话，"abc" 就会被系统清理出常量池了。
+
+
+
+#### 2.6 如何判断一个类是无用的类
+
+方法区主要回收的是无用的类，那么如何判断一个类是无用的类的呢？
+
+判定一个常量是否是“废弃常量”比较简单，而要判定一个类是否是“无用的类”的条件则相对苛刻许多。类需要同时满足下面 3 个条件才能算是 **“无用的类”** ：
+
+- 该类所有的实例都已经被回收，也就是 Java 堆中不存在该类的任何实例。
+- 加载该类的 `ClassLoader` 已经被回收。
+- 该类对应的 `java.lang.Class` 对象没有在任何地方被引用，无法在任何地方通过反射访问该类的方法。
+
+虚拟机可以对满足上述 3 个条件的无用类进行回收，这里说的仅仅是“可以”，而并不是和对象一样不使用了就会必然被回收。
+
+
+
+
+
+#### 3 垃圾收集算法
+
+[![垃圾收集算法分类](MarkDown_Java%20SE.assets/%E5%9E%83%E5%9C%BE%E6%94%B6%E9%9B%86%E7%AE%97%E6%B3%95.png)](https://github.com/Snailclimb/JavaGuide/blob/master/docs/java/jvm/pictures/jvm垃圾回收/垃圾收集算法.png)
+
+
+
+
+
+#### 3.1 标记-清除算法
+
+该算法分为“标记”和“清除”阶段：首先标记出所有不需要回收的对象，在标记完成后统一回收掉所有没有被标记的对象。它是最基础的收集算法，后续的算法都是对其不足进行改进得到。这种垃圾收集算法会带来两个明显的问题：
+
+1. **效率问题**
+2. **空间问题（标记清除后会产生大量不连续的碎片）**
+
+[![img](MarkDown_Java%20SE.assets/%E6%A0%87%E8%AE%B0-%E6%B8%85%E9%99%A4%E7%AE%97%E6%B3%95.jpeg)](https://github.com/Snailclimb/JavaGuide/blob/master/docs/java/jvm/pictures/jvm垃圾回收/标记-清除算法.jpeg)
+
+#### 3.2 标记-复制算法
+
+为了解决效率问题，“标记-复制”收集算法出现了。它可以将内存分为大小相同的两块，每次使用其中的一块。当这一块的内存使用完后，就将还存活的对象复制到另一块去，然后再把使用的空间一次清理掉。这样就使每次的内存回收都是对内存区间的一半进行回收。
+
+[![复制算法](MarkDown_Java%20SE.assets/90984624.png)](https://github.com/Snailclimb/JavaGuide/blob/master/docs/java/jvm/pictures/jvm垃圾回收/90984624.png)
+
+#### 3.3 标记-整理算法
+
+根据老年代的特点提出的一种标记算法，标记过程仍然与“标记-清除”算法一样，但后续步骤不是直接对可回收对象回收，而是让所有存活的对象向一端移动，然后直接清理掉端边界以外的内存。
+
+[![标记-整理算法 ](MarkDown_Java%20SE.assets/94057049.png)](https://github.com/Snailclimb/JavaGuide/blob/master/docs/java/jvm/pictures/jvm垃圾回收/94057049.png)
+
+#### 3.4 分代收集算法
+
+当前虚拟机的垃圾收集都采用分代收集算法，这种算法没有什么新的思想，只是根据对象存活周期的不同将内存分为几块。一般将 java 堆分为新生代和老年代，这样我们就可以根据各个年代的特点选择合适的垃圾收集算法。
+
+**比如在新生代中，每次收集都会有大量对象死去，所以可以选择”标记-复制“算法，只需要付出少量对象的复制成本就可以完成每次垃圾收集。而老年代的对象存活几率是比较高的，而且没有额外的空间对它进行分配担保，所以我们必须选择“标记-清除”或“标记-整理”算法进行垃圾收集。**
+
+**延伸面试问题：** 
+
+##### HotSpot 为什么要分为新生代和老年代？
+
+因为有的对象寿命长，有的对象寿命短。应该将寿命长的对象放在一个区，寿命短的对象放在一个区。不同的区采用不同的垃圾收集算法。寿命短的区清理频次高一点，寿命长的区清理频次低一点。提高效率。
+
+
+
+根据上面的对分代收集算法的介绍回答。
+
+那么，在JVM的新生代内存中，为什么除了Eden区，还要设置两个Survivor区？
+
+##### 1 为什么要有Survivor区
+
+如果没有Survivor，Eden区每进行一次Minor GC，存活的对象就会被送到老年代。老年代很快被填满，触发Major GC（因为Major GC一般伴随着Minor GC，也可以看做触发了Full GC）。老年代的内存空间远大于新生代，进行一次Full GC消耗的时间比Minor GC长得多。你也许会问，执行时间长有什么坏处？频发的Full GC消耗的时间是非常可观的，这一点会影响大型程序的执行和响应速度，更不要说某些连接会因为超时发生连接错误了。
+
+我们可以得到第一条结论：Survivor的存在意义，就是减少被送到老年代的对象，进而减少Full GC的发生，Survivor的预筛选保证，只有经历16次Minor GC还能在新生代中存活的对象，才会被送到老年代。
+
+##### 2 为什么要设置两个Survivor区
+
+设置两个Survivor区最大的好处就是解决了碎片化，下面我们来分析一下。
+
+![image-20210316163620737](MarkDown_Java%20SE.assets/image-20210316163620737.png)
+
+为什么一个Survivor区不行？第一部分中，我们知道了必须设置Survivor区。假设现在只有一个survivor区，我们来模拟一下流程：
+
+刚刚新建的对象在Eden中，一旦Eden满了，触发一次Minor GC，Eden中的存活对象就会被移动到Survivor区。这样继续循环下去，下一次Eden满了的时候，问题来了，此时进行Minor GC，Eden和Survivor各有一些存活对象，如果此时把Eden区的存活对象硬放到Survivor区，很明显这两部分对象所占有的内存是不连续的，也就导致了内存碎片化。
+
+我绘制了一幅图来表明这个过程。其中色块代表对象，白色框分别代表Eden区（大）和Survivor区（小）。Eden区理所当然大一些，否则新建对象很快就导致Eden区满，进而触发Minor GC，有悖于初衷。
+
+碎片化带来的风险是极大的，严重影响JAVA程序的性能。堆空间被散布的对象占据不连续的内存，最直接的结果就是，堆中没有足够大的连续内存空间，接下去如果程序需要给一个内存需求很大的对象分配内存。。。画面太美不敢看。。。这就好比我们爬山的时候，背包里所有东西紧挨着放，最后就可能省出一块完整的空间放相机。如果每件行李之间隔一点空隙乱放，很可能最后就要一路把相机挂在脖子上了。
+
+那么，顺理成章的，应该建立两块Survivor区，刚刚新建的对象在Eden中，经历一次Minor GC，Eden中的存活对象就会被移动到第一块survivor space S0，Eden被清空；等Eden区再满了，就再触发一次Minor GC，Eden和S0中的存活对象又会被复制送入第二块survivor space S1（这个过程非常重要，因为这种复制算法保证了S1中来自S0和Eden两部分的存活对象占用连续的内存空间，避免了碎片化的发生）。S0和Eden被清空，然后下一轮S0与S1交换角色，如此循环往复。如果对象的复制次数达到16次，该对象就会被送到老年代中。下图中每部分的意义和上一张图一样，就不加注释了。
+
+![两块Survivor避免碎片化](MarkDown_Java%20SE.assets/20160516174938778)
+
+那么，Survivor为什么不分更多块呢？比方说分成三个、四个、五个?显然，如果Survivor区再细分下去，每一块的空间就会比较小，很容易导致Survivor区满，因此，我认为两块Survivor区是经过权衡之后的最佳方案。
+
+
+
+
+
+
 
 
 
