@@ -421,3 +421,60 @@ maven
 
 </project>
 ```
+
+
+
+
+
+
+
+### **作用域（Scope）和生命周期**
+
+理解我们目前已经讨论过的不同作用域和生命周期类是至关重要的，因为错误的使用会导致非常严重的并发问题。
+
+我们可以先画一个流程图，分析一下Mybatis的执行过程！
+
+
+
+![图片](MyBatis.assets/640)
+
+**作用域理解**
+
+- SqlSessionFactoryBuilder 的作用在于创建 SqlSessionFactory，创建成功后，SqlSessionFactoryBuilder 就失去了作用，所以它只能存在于创建 SqlSessionFactory 的方法中，而不要让其长期存在。因此 **SqlSessionFactoryBuilder 实例的最佳作用域是方法作用域**（也就是局部方法变量）。
+- SqlSessionFactory 可以被认为是一个数据库连接池，它的作用是创建 SqlSession 接口对象。因为 MyBatis 的本质就是 Java 对数据库的操作，所以 SqlSessionFactory 的生命周期存在于整个 MyBatis 的应用之中，所以一旦创建了 SqlSessionFactory，就要长期保存它，直至不再使用 MyBatis 应用，所以可以认为 SqlSessionFactory 的生命周期就等同于 MyBatis 的应用周期。
+- 由于 SqlSessionFactory 是一个对数据库的连接池，所以它占据着数据库的连接资源。如果创建多个 SqlSessionFactory，那么就存在多个数据库连接池，这样不利于对数据库资源的控制，也会导致数据库连接资源被消耗光，出现系统宕机等情况，所以尽量避免发生这样的情况。
+- 因此在一般的应用中我们往往希望 SqlSessionFactory 作为一个单例，让它在应用中被共享。所以说 **SqlSessionFactory 的最佳作用域是应用作用域。**
+- 如果说 SqlSessionFactory 相当于数据库连接池，那么 SqlSession 就相当于一个数据库连接（Connection 对象），你可以在一个事务里面执行多条 SQL，然后通过它的 commit、rollback 等方法，提交或者回滚事务。所以它应该存活在一个业务请求中，处理完整个请求后，应该关闭这条连接，让它归还给 SqlSessionFactory，否则数据库资源就很快被耗费精光，系统就会瘫痪，所以用 try...catch...finally... 语句来保证其正确关闭。
+- **所以 SqlSession 的最佳的作用域是请求或方法作用域。**
+
+
+
+
+
+# [MyBatis的执行流程](https://www.cnblogs.com/qingmuchuanqi48/p/10968102.html)
+
+这个是一个大致的流程图
+
+![img](MyBatis.assets/1157088-20190603154428169-745819181.png)
+
+详细的流程为:
+
+　　1.加载全局配置文件(MybatisConfig.xml),这个配置文件中通常是别名设置,拦截器的设置,(当ssm整合后,环境配置与mapper映射文件的注册会转移到spring配置文件中)
+
+　　2.xml全局配置文件会产生一个构建者类,叫做xmlconfigBuilder,这个类是用来通过xml配置文件来构建Configuration对象实例的,构建的过程就是解析(MybatisConfig.xml)配置文件调用parse产生configuration对象
+
+　　3.随后产生的就是Mybatis的配置类(Configuration),这个类可以作为项目的全局配置对象
+
+　　4.接下来便是SqlSessionFactory(会话工厂)的构建者类,(SqlSessionFactoryBuilder),configuration配置对象,就可以调用会话工厂构建者类中的build方法完成对会话工厂对象的构建.
+
+　　5.产生SqlSessionFactory(会话工厂),是用来生成会话的接口,有一个实现类(DefaultSqlSessionFactory)这个实现类是真正的会话的工厂类,并且它是单例的.会一直存在到服务器关闭.
+
+　　6.通过调用会话工厂的实现类中(DefaultSqlSessionFactory)的openSession()方法完成SqlSession对象的创建.
+
+　　7.产生sqlsession,该接口是会话,并且是非线程安全的.每一次对数据库的访问都需要创建一个sqlsession,当得到结果后sqlsession就会被废弃,所以声明周期短.
+
+　　8.当然这当中还有一个Excutor执行器接口,这才是内部真正对数据库进行操作的操作者,他才是真正的干事的.
+
+　　9.另外就是StatementHandler该类是Statment处理器,封装了对数据库各种操作方法,使用时候,就调用其中的一些方法.
+
+　　10.最后就是结果集处理器(ResultSetHandler),这个处理器的作用就是对结果进行处理并返回的.
