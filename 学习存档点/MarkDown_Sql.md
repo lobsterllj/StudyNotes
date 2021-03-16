@@ -383,7 +383,7 @@ MyISAM 的 B+Tree 里面，叶子节点存储的是数据文件对应的磁盘�
 
 ![图片](https://mmbiz.qpic.cn/mmbiz_png/4UksEIc42Kf39gjuw9f9WqR4ibBiaQ5SIeRbqzVMyIm2yjaOibsjCGibKnJe7ibky4XSBJHtP2aqpmYwBAJojCs6HcQ/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
 
-**InnoDB**
+InnoDB
 
 > InnoDB 只有一个文件（.ibd 文件），那索引放在哪里呢？
 
