@@ -551,6 +551,516 @@ public class ArrayList<E> extends AbstractList<E>
 
 ```
 
+
+
+#### ArrayList中两个空数组的作用
+
+```java
+transient Object[] elementData;
+```
+
+由transient修饰的数组，我们所说的ArrayList的底层是个数组就是它了！！！
+
+transient关键字的作用
+
+java的serialization提供了一个非常棒的存储对象状态的机制，说白了serialization就是把对象的状态存储到硬盘上去，等需要的时候就可以再把它读出来使用。有些时候像银行卡号这些字段是不希望在网络上传输的，transient的作用就是把这个字段的生命周期仅存于调用者的内存中而不会写到磁盘里持久化，意思是transient修饰的elementData字段，他的生命周期仅仅在内存中，不会被写到磁盘中。
+modCount是什么？ 在成员属性中并没有找到这个东西。那他为什么会出现在这里？
+真相只有一个：去他的（ArrayList）的父类找找看。
+
+果不其然在AbstractList.java中找到了modCount.
+
+```java
+protected transient int modCount = 0;
+```
+
+通过阅读该变量的注释我们可以发现modCount是用来记录ArrayList被修改的次数的。
+
+
+在数据结构的学习中ArrayList（顺序表）可以说是最早乃至第一个接触的东西，并且在此之前想必也实现过 “MyArrayList”，然而今天由于好奇我就看了看大佬是如何实现“ArrayList”的。
+
+我们从头来看
+
+```java
+public class ArrayList<E> extends AbstractList<E>
+        implements List<E>, RandomAccess, Cloneable, java.io.Serializable
+```
+
+
+不难看出ArrayList继承于AbstractList类同时也执行了RandomAccess，Cloneable，java.io.Serializable接口，
+
+不难看出ArrayList继承于AbstractList类同时也执行了RandomAccess，Cloneable，java.io.Serializable接口，
+
+我们先来看看ArrayList执行的三个接口
+
+RandomAccess
+RandomAccess接口的作用是只要List集合实现这个接口，就能支持快速随机访问。
+具体细节请访问：
+ArrayList集合实现RandomAccess接口有何作用？为何LinkedList集合却没实现这接口？
+
+Cloneable
+Cloneable 接口是用于ArrayList克隆的。
+
+java.io.Serializable
+java.io.Serializable是一个实现序列化的接口
+具体细节请访问：
+java.io.Serializable（序列化）接口详细总结
+
+其次我们可以看到ArrayList继承于AbstractList类
+
+现在我们看看ArrayList里面的一些成员属性：
+
+```java
+private static final long serialVersionUID = 8683452581122892189L;
+```
+
+
+serialVersionUID的作用：
+序列化时为了保持版本的兼容性，即在版本升级时反序列化仍保持对象的唯一性。
+
+serialVersionUID的作用：
+序列化时为了保持版本的兼容性，即在版本升级时反序列化仍保持对象的唯一性。
+
+```java
+ private static final int DEFAULT_CAPACITY = 10;
+```
+
+
+DEFAULT_CAPACITY的作用
+字面意思，默认容量大小为10.
+
+
+
+```java
+private int size;
+```
+
+
+数组大小
+
+数组大小
+
+```java
+private static final Object[] EMPTY_ELEMENTDATA = {};
+private static final Object[] DEFAULTCAPACITY_EMPTY_ELEMENTDATA = {};
+```
+
+
+为了方便观察我将这两个空数组放到了一起。
+相信大家也会有跟我一样的困惑，那就是我们虽然知道ArrayList的底层是一个数组，但是这里为什么会出现两个空数组，所以为了搞清楚这个情况。我们继续往下看构造方法。
+
+构造方法
+
+```java
+ public ArrayList(int initialCapacity) {
+        if (initialCapacity > 0) {
+            this.elementData = new Object[initialCapacity];
+        } else if (initialCapacity == 0) {
+            this.elementData = EMPTY_ELEMENTDATA;
+        } else {
+            throw new IllegalArgumentException("Illegal Capacity: "+
+                                               initialCapacity);
+        }
+    }
+```
+
+
+这段代码的注解是构造具有指定初始容量的空列表。
+通过if语句我们可以看到：
+该方法传进来一个参数，如果该参数的值大于0则：
+
+这段代码的注解是构造具有指定初始容量的空列表。
+通过if语句我们可以看到：
+该方法传进来一个参数，如果该参数的值大于0则：
+
+```java
+List<Integer> list = new ArrayList<>(1);
+this.elementData = new Object[initialCapacity];
+```
+
+也就是：
+
+```java
+transient Object[] elementData = new Object[initialCapacity];
+```
+
+可以看出new了一个Object的数组 数组大小为传进来的值。
+
+可以看出new了一个Object的数组 数组大小为传进来的值。
+
+如果该参数等于0则：
+
+```java
+List<Integer> list = new ArrayList<>(0);
+this.elementData = EMPTY_ELEMENTDATA;
+```
+
+也就是：
+
+```java
+transient Object[] elementData = EMPTY_ELEMENTDATA;
+```
+
+可以看出如果传进来一个0则底层数组会等于这个短的空数组。
+
+可以看出如果传进来一个0则底层数组会等于这个短的空数组。
+
+否则（也就是传进来的参数小于0）：
+
+```java
+List<Integer> list = new ArrayList<>(-1);
+```
+
+抛出异常：IllegalArgumentException("Illegal Capacity: "+
+initialCapacity）
+
+```java
+public ArrayList() {
+        this.elementData = DEFAULTCAPACITY_EMPTY_ELEMENTDATA;
+    }
+```
+
+
+可以看出，如果我们不给ArrayList传参数的话其底层数组会等于长的空数组。
+
+看到这里就突然奇怪了起来！为什么要用两个不同的空数组来区别呢？ 为什么在不传参数的时候不让elementData等于短的空数组呢？？ 为了看清这一点，我决定在底下的代码中找找这两个变量。
+
+ensureCapacity方法
+
+```java
+public void ensureCapacity(int minCapacity) {
+        int minExpand = (elementData != DEFAULTCAPACITY_EMPTY_ELEMENTDATA) ? 0 : DEFAULT_CAPACITY;
+
+    if (minCapacity > minExpand) {
+       ensureExplicitCapacity(minCapacity);
+   }
+}
+```
+
+
+首先我在ensureCapacity方法中找到了长的空数组。
+在这里可以通过三目运算符发现。如果在new ArrayList时不传参数，则将minExpand的大小设置为10，否则设置为0.
+最后通过if语句，如果传进来的数（minCapacity）大于minExpand则调入 ensureExplicitCapacity(minCapacity);函数中。
+
+但是在这个方法中虽然找到较长的空数组，但是发现似乎并没有用到呀…只是做了一个工具人，所以我们继续看下一个方法：
+
+calculateCapacity方法
+
+```java
+ private static int calculateCapacity(Object[] elementData, int minCapacity) {
+        if (elementData == DEFAULTCAPACITY_EMPTY_ELEMENTDATA) {
+            return Math.max(DEFAULT_CAPACITY, minCapacity);
+        }
+        return minCapacity;
+    }
+```
+
+
+通过简单的if语句我们能很轻易的看出：
+如果new ArrayList的时候没有传参数 则返回DEFAULT_CAPACITY（默认容量：10）与接受到的参数 minCapacity中的最大值。
+否则：
+返回minCapacity。
+
+通过简单的if语句我们能很轻易的看出：
+如果new ArrayList的时候没有传参数 则返回DEFAULT_CAPACITY（默认容量：10）与接受到的参数 minCapacity中的最大值。
+否则：
+返回minCapacity。
+
+这个方法似乎有点用处了，那么我们就要查看一下是哪位调用了这个方法。他究竟做了些什么：
+
+ensureCapacityInternal方法
+
+```java
+private void ensureCapacityInternal(int minCapacity) {
+        ensureExplicitCapacity(calculateCapacity(elementData, minCapacity));
+    }
+```
+
+
+这个方法可能一下给人就看傻了，别急 我给大家写成易懂的写法：
+
+这个方法可能一下给人就看傻了，别急 我给大家写成易懂的写法：
+
+易懂版ensureCapacityInternal方法
+
+```java
+private void ensureCapacityInternal(int minCapacity) {
+        int a = calculateCapacity(elementData, minCapacity);
+        ensureExplicitCapacity(a);
+    }
+```
+
+
+这不就好起来了吗。我们不难发现这里把上一个方法所返回的值又传给了ensureExplicitCapacity方法。
+接下来我来再来看看ensureExplicitCapacity方法又做了些什么：
+
+这不就好起来了吗。我们不难发现这里把上一个方法所返回的值又传给了ensureExplicitCapacity方法。
+接下来我来再来看看ensureExplicitCapacity方法又做了些什么：
+
+ensureExplicitCapacity方法
+
+```java
+ private void ensureExplicitCapacity(int minCapacity) {
+        modCount++;
+
+    if (minCapacity - elementData.length > 0)
+        grow(minCapacity);
+}
+```
+
+
+modCount是什么？ 在成员属性中并没有找到这个东西。那他为什么会出现在这里？
+真相只有一个：去他的（ArrayList）的父类找找看。
+
+果不其然在AbstractList.java中找到了modCount.
+
+```java
+protected transient int modCount = 0;
+```
+
+通过阅读该变量的注释我们可以发现modCount是用来记录ArrayList被修改的次数的。
+
+接下来看下一条if语句：
+
+```java
+if (minCapacity - elementData.length > 0)
+            grow(minCapacity);
+```
+
+
+如果传进来的这个参数minCapacity大于elementData数组的长度则调用 grow(minCapacity);
+
+grow方法
+
+```java
+private void grow(int minCapacity) {
+
+    int oldCapacity = elementData.length;
+    int newCapacity = oldCapacity + (oldCapacity >> 1);
+    if (newCapacity - minCapacity < 0)
+        newCapacity = minCapacity;
+    if (newCapacity - MAX_ARRAY_SIZE > 0)
+        newCapacity = hugeCapacity(minCapacity);
+
+    elementData = Arrays.copyOf(elementData, newCapacity);
+}
+```
+
+
+这个方法总算是到头了我们来康康这个方法解决了什么问题！
+首先将底层数组的长度存储于oldCapacity中，
+
+然后新建一个newCapacity其长度为：oldCapacity + (oldCapacity >> 1);
+也就是 oldCapacity + (oldCapacity / 2);
+将原来的容量扩大了0.5倍。
+
+接下来进行判断：
+如果扩容后的newCapacity小于传进来的参数minCapacity则：
+newCapacity = minCapacity;
+将minCapacity的值赋值于newCapacity中：
+
+如果newCapacity的值大于MAX_ARRAY_SIZE：
+MAX_ARRAY_SIZE（ArrayList的最大长度）：
+
+```java
+private static final int MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8;
+```
+
+
+则：
+
+```java
+newCapacity = hugeCapacity(minCapacity);
+```
+
+则：
+newCapacity = hugeCapacity(minCapacity);
+
+哦吼 那我们再来看看胡歌方法hugeCapacity。
+
+hugeCapacity方法
+
+```java
+ private static int hugeCapacity(int minCapacity) {
+        if (minCapacity < 0) 
+            throw new OutOfMemoryError();
+        return (minCapacity > MAX_ARRAY_SIZE) ?
+            Integer.MAX_VALUE :
+            MAX_ARRAY_SIZE;
+    }
+```
+
+
+这就明白了
+如果形参minCapacity小于0，数组越界异常
+否则 若 minCapacity > MAX_ARRAY_SIZE
+则返回Integer.MAX_VALUE。也是int的最大值。
+否则返回常量MAX_ARRAY_SIZE。
+
+这就明白了
+如果形参minCapacity小于0，数组越界异常
+否则 若 minCapacity > MAX_ARRAY_SIZE
+则返回Integer.MAX_VALUE。也是int的最大值。
+否则返回常量MAX_ARRAY_SIZE。
+
+好的继续回到grow方法中：
+
+```java
+if (newCapacity - MAX_ARRAY_SIZE > 0)
+            newCapacity = hugeCapacity(minCapacity);
+```
+
+
+经过if语句判断可以看出这个胡歌方法（hugeCapacity）最终的返回值应该为Integer.MAX_VALUE。
+
+好的走出if语句就剩下最后一条了！！！
+
+数组扩容
+
+```java
+ elementData = Arrays.copyOf(elementData, newCapacity);
+```
+
+
+这一条就很明了了 复制一个新的数组,数据还是原来的数据 数组大小变成扩容后的大小 然后将复制出来的数组的覆盖到底层数组中，从而实现ArrayList的扩容。
+
+这一条就很明了了 复制一个新的数组,数据还是原来的数据 数组大小变成扩容后的大小 然后将复制出来的数组的覆盖到底层数组中，从而实现ArrayList的扩容。
+
+呼！是不是晕了！！
+
+那我们将所有方法写入main函数中做一个总结也许就会简单明了！！！
+只考虑new ArrayList<>(); 的情况在main函数中实现
+
+```java
+public class TestDemo{
+    //初始容量
+    private static final int DEFAULT_CAPACITY = 10;
+    //较长空数组
+    private static final Object[] DEFAULTCAPACITY_EMPTY_ELEMENTDATA = {};
+    //底层数组
+    public static Object[] elementData;
+    //神秘参数
+    public  static int minCapacity;
+    //ArrayList的最大长度
+    private static final int MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8;
+
+public static void main(String[] args) {
+
+    // ArrayList<Integer> list = new ArratList<>(); 不在ArrayList中导入参数
+    elementData = DEFAULTCAPACITY_EMPTY_ELEMENTDATA;
+
+    //calculateCapacity 方法 将默认值10传入minCapacity中
+    if (elementData == DEFAULTCAPACITY_EMPTY_ELEMENTDATA) {
+
+    minCapacity = Math.max(DEFAULT_CAPACITY, minCapacity);
+}
+    //ensureCapacityInternal 方法 由于该方法只是调用了另一个方法所以只以注释的方式呈现
+    //ensureExplicitCapacity(minCapacity);
+    //hugeCapacity 胡歌方法
+    int Huge;
+       if (minCapacity < 0) {
+           throw new OutOfMemoryError();
+       }else {
+           Huge = (minCapacity > MAX_ARRAY_SIZE) ? Integer.MAX_VALUE : MAX_ARRAY_SIZE;
+           
+       }
+
+    //ensureExplicitCapacity 方法 if语句内为 grow 方法  ps:由于modCount++; 是用于记录操作次数 所以暂不呈现
+
+    if (minCapacity - elementData.length > 0){        
+    //grow方法 该方法用于数组扩容。
+        int oldCapacity = elementData.length;
+        int newCapacity = oldCapacity + (oldCapacity >> 1);
+        if (newCapacity - minCapacity < 0)
+            newCapacity = minCapacity;
+        if (newCapacity - MAX_ARRAY_SIZE > 0)
+            newCapacity = Huge;
+        elementData = Arrays.copyOf(elementData, newCapacity);
+    }
+}
+
+}  
+
+
+```
+
+其实已经很容易看出来了当我们不给ArrayList传参数（容量）时calculateCapacity方法会将默认容量DEFAULT_CAPACITY：（10）作为底层数组elementData的初始容量。然而如何判断ArrayList是否传参数呢？就是通过较长空数组来得知的。
+
+那么较短的空数组又是怎么回事呢？
+其实我们已经应该猜到一些了，当我们将ArrayList的长度设置为0.
+
+```java
+ArrayList list = new Arraylist(0);
+```
+
+那不就是为了整了一个空的ArrayList也就是空数组嘛？
+可是为什么同样是空数组却要如此分开来呢？
+答案在calculateCapacity方法里。
+calculateCapacity方法中有一个if语句：
+
+那不就是为了整了一个空的ArrayList也就是空数组嘛？
+可是为什么同样是空数组却要如此分开来呢？
+答案在calculateCapacity方法里。
+calculateCapacity方法中有一个if语句：
+
+```java
+if (elementData == DEFAULTCAPACITY_EMPTY_ELEMENTDATA) {
+            return Math.max(DEFAULT_CAPACITY, minCapacity);
+        }
+```
+
+
+对就是这个这个if语句！！
+如果将这两个（new Arraylist(0);或new Arraylist();）表现在一个空数组中，那系统就裂开了（开玩笑）。
+试想一下 我本来想整一个容量为0的 ArrayList结果你这一操作 给我把容量 嘎 变成10了。或者说我本来想弄个默认的容量大小结果你一下给我们把容量弄成0了。所以咋想都不合适吧！
+
+对就是这个这个if语句！！
+如果将这两个（new Arraylist(0);或new Arraylist();）表现在一个空数组中，那系统就裂开了（开玩笑）。
+试想一下 我本来想整一个容量为0的 ArrayList结果你这一操作 给我把容量 嘎 变成10了。或者说我本来想弄个默认的容量大小结果你一下给我们把容量弄成0了。所以咋想都不合适吧！
+
+然而我们是如何将new Arraylist(0);或是new Arraylist();区分开的呢？
+那就要看看我们最开始看到的“工具人方法”了：
+
+ensureCapacity方法
+
+```java
+public void ensureCapacity(int minCapacity) {
+        int minExpand = (elementData != DEFAULTCAPACITY_EMPTY_ELEMENTDATA) ? 0 : DEFAULT_CAPACITY;
+		if (minCapacity > minExpand) {
+			ensureExplicitCapacity(minCapacity);
+	}
+}
+```
+
+
+可以看出如果咱的elementData等于较长空数组则不会直接调用ensureExplicitCapacity方法了
+
+ensureExplicitCapacity方法
+
+```java
+ private void ensureExplicitCapacity(int minCapacity) {
+        modCount++;
+        if (minCapacity - elementData.length > 0)
+        grow(minCapacity);
+}
+```
+
+
+否则直接就进入了ensureExplicitCapacity方法后进行比较然后扩容
+
+这时候突然恍然大悟：
+最开始说的较长空数组在这个方法（ensureCapacity方法）中当工具人原来并不严谨，因为此方法正是区分new ArrayList时候是否传值 如果没传值则底层数组等于较长空数组，然后将较长空数组在该方法中被筛选出来 通过一系列手段将这个未传参的ArrayList的默认容量设置为10！
+
+总结：
+1.DEFAULTCAPACITY_EMPTY_ELEMENTDATA 该数组为空数组，用来记录ArrayList在生成时没有进行传参数，随后在操作过程中将elementData（底层数组）的大小设置为默认值10。
+
+2.EMPTY_ELEMENTDATA用来记录ArrayList在生成时传参为0的情况。而为了与没传参数的情况分开所以重新用了一个空数组。
+
+3.ArrayList扩容是通过grow方法实现的且每次扩充的容量为elementData当前长度的一半。
+
+原文链接：https://blog.csdn.net/GUOCHUC/article/details/107324793
+
+
+
 #### 分析 ArrayList 扩容机制
 
 #### 先从 ArrayList 的构造函数说起
