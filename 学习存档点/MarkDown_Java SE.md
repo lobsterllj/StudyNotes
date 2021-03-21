@@ -3323,7 +3323,7 @@ System.out.println(str2==str3);//false
 
 **验证：**
 
-```
+```java
 		String s1 = new String("abc");// 堆内存的地址值
 		String s2 = "abc";
 		System.out.println(s1 == s2);// 输出 false,因为一个是堆内存，一个是常量池的内存，故两者是不同的。
@@ -3332,7 +3332,7 @@ System.out.println(str2==str3);//false
 
 **结果：**
 
-```
+```java
 false
 true
 ```
@@ -3343,7 +3343,7 @@ true
 
 **Java 基本类型的包装类的大部分都实现了常量池技术，即 Byte,Short,Integer,Long,Character,Boolean；前面 4 种包装类默认创建了数值[-128，127] 的相应类型的缓存数据，Character创建了数值在[0,127]范围的缓存数据，Boolean 直接返回True Or False。如果超出对应范围仍然会去创建新的对象。** 为啥把缓存设置为[-128，127]区间？（[参见issue/461](https://github.com/Snailclimb/JavaGuide/issues/461)）性能和资源之间的权衡。
 
-```
+```java
 public static Boolean valueOf(boolean b) {
     return (b ? TRUE : FALSE);
 }
@@ -3360,7 +3360,7 @@ private static class CharacterCache {
 
 两种浮点数类型的包装类 Float,Double 并没有实现常量池技术。
 
-```
+```java
 		Integer i1 = 33;
 		Integer i2 = 33;
 		System.out.println(i1 == i2);// 输出 true
@@ -3376,7 +3376,7 @@ private static class CharacterCache {
 
 #### **Integer 缓存源代码：**
 
-```
+```java
 /**
 *此方法将始终缓存-128 到 127（包括端点）范围内的值，并可以缓存此范围之外的其他值。
 */
@@ -3392,7 +3392,7 @@ private static class CharacterCache {
 1. Integer i1=40；Java 在编译的时候会直接将代码封装成 Integer i1=Integer.valueOf(40);，从而使用常量池中的对象。
 2. Integer i1 = new Integer(40);这种情况下会创建新的对象。
 
-```
+```java
   Integer i1 = 40;
   Integer i2 = new Integer(40);
   System.out.println(i1==i2);//输出 false
@@ -3400,7 +3400,7 @@ private static class CharacterCache {
 
 **Integer 比较更丰富的一个例子:**
 
-```
+```java
   Integer i1 = 40;
   Integer i2 = 40;
   Integer i3 = 0;
@@ -3418,7 +3418,7 @@ private static class CharacterCache {
 
 结果：
 
-```
+```java
 i1=i2   true
 i1=i2+i3   true
 i1=i4   false
@@ -3859,11 +3859,11 @@ ClassFile {
 
 类访问和属性修饰符:
 
-[![类访问和属性修饰符](MarkDown_Java%20SE.assets/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545382541452542462545392539372541452545362541302538372545352542462539372e706e67)](https://camo.githubusercontent.com/91992fe897f090ae8df1d277332c2569faa6d830f0c5717ad4ca192dfaa1b3e3/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545382541452542462545392539372541452545362541302538372545352542462539372e706e67)
+![image-20210322002211721](MarkDown_Java%20SE.assets/image-20210322002211721.png)
 
 我们定义了一个 Employee 类
 
-```
+```java
 package top.snailclimb.bean;
 public class Employee {
    ...
@@ -3918,7 +3918,7 @@ public class Employee {
 
 **字段的 access_flag 的取值:**
 
-[![字段的 access_flag 的取值](MarkDown_Java%20SE.assets/68747470733a2f2f67756964652d626c6f672d696d616765732e6f73732d636e2d7368656e7a68656e2e616c6979756e63732e636f6d2f4a564d2f696d6167652d32303230313033313038343334323835392e706e67)](https://camo.githubusercontent.com/874994e0673a2dcc9712cc678ee23a6c8455df17ba8ffe74e45f59b1a519e64d/68747470733a2f2f67756964652d626c6f672d696d616765732e6f73732d636e2d7368656e7a68656e2e616c6979756e63732e636f6d2f4a564d2f696d6167652d32303230313033313038343334323835392e706e67)
+![image-20210322002301252](MarkDown_Java%20SE.assets/image-20210322002301252.png)
 
 
 
@@ -3943,7 +3943,7 @@ Class 文件存储格式中对方法的描述与对字段的描述几乎采用�
 
 **方法表的 access_flag 取值：**
 
-[![方法表的 access_flag 取值](MarkDown_Java%20SE.assets/68747470733a2f2f67756964652d626c6f672d696d616765732e6f73732d636e2d7368656e7a68656e2e616c6979756e63732e636f6d2f4a564d2f696d6167652d32303230313033313038343234383936352e706e67)](https://camo.githubusercontent.com/8a265d23e112606997d92f7df33642391c315eedaf99baa20f1d9ccf5fd9c150/68747470733a2f2f67756964652d626c6f672d696d616765732e6f73732d636e2d7368656e7a68656e2e616c6979756e63732e636f6d2f4a564d2f696d6167652d32303230313033313038343234383936352e706e67)
+![image-20210322002339549](MarkDown_Java%20SE.assets/image-20210322002339549.png)
 
 注意：因为`volatile`修饰符和`transient`修饰符不可以修饰方法，所以方法表的访问标志中没有这两个对应的标志，但是增加了`synchronized`、`native`、`abstract`等关键字修饰方法，所以也就多了这些关键字对应的标志。
 
@@ -4010,7 +4010,7 @@ Class 文件需要加载到虚拟机中之后才能运行和使用，那么虚�
 
 #### 验证
 
-[![验证阶段示意图](MarkDown_Java%20SE.assets/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545392541412538432545382541462538312545392539382542362545362541452542352e706e67)](https://camo.githubusercontent.com/2d2bf0d21ff1cd9b2a9634077b8ddd2e8e3615d8154e8129bb727cc6617f4a80/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545392541412538432545382541462538312545392539382542362545362541452542352e706e67)
+![image-20210322002448158](MarkDown_Java%20SE.assets/image-20210322002448158.png)
 
 
 
@@ -4203,11 +4203,22 @@ protected Class<?> loadClass(String name, boolean resolve)
 
 
 
+```java
+//TODO:双亲依赖
+```
+
 https://juejin.cn/post/6844903729435508750
 
 
 
 #### 哪些操作会破坏双亲依赖?
+
+【面试题】jvm中如何打破双亲委托机制？ - wuxinliulei的回答 - 知乎
+https://www.zhihu.com/question/45022217/answer/425141928
+
+
+
+
 
 
 
