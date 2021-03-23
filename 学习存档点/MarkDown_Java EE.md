@@ -1,4 +1,8 @@
-Servlet
+
+
+# JavaWeb
+
+## Servlet
 
 回答1
 
@@ -145,3 +149,25 @@ servlet的本质是什么，它是如何工作的？ - bravo1988的回答 - 知�
 ![image-20210323003434638](MarkDown_Java%20EE.assets/image-20210323003434638.png)
 
 end回答2
+
+
+
+
+
+
+
+
+
+
+
+SpringMVC
+
+
+
+
+
+
+
+![2020071914335890](MarkDown_Java%20EE.assets/2020071914335890.png)
+
+![20200719143342368](MarkDown_Java%20EE.assets/20200719143342368.png)
