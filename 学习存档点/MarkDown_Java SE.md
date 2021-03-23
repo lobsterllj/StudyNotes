@@ -2772,6 +2772,38 @@ Exception（异常）:是程序本身可以处理的异常。Exception 类有一
 1. 可查异常（编译器要求必须处置的异常）：正确的程序在运行中，很容易出现的、情理可容的异常状况。除了Exception中的RuntimeException及RuntimeException的子类以外，其他的Exception类及其子类(例如：IOException和ClassNotFoundException)都属于可查异常。这种异常的特点是Java编译器会检查它，也就是说，当程序中可能出现这类异常，要么用try-catch语句捕获它，要么用throws子句声明抛出它，否则编译不会通过。
 2. 不可查异常(编译器不要求强制处置的异常):包括运行时异常（RuntimeException与其子类）和错误（Error）。RuntimeException表示编译器不会检查程序是否对RuntimeException作了处理，在程序中不必捕获RuntimException类型的异常，也不必在方法体声明抛出RuntimeException类。RuntimeException发生的时候，表示程序中出现了编程错误，所以应该找出错误修改程序，而不是去捕获RuntimeException。
 
+- **什么是unchecked异常?**
+
+即RuntimeException（运行时异常）
+**不需要try...catch...或throws 机制去处理的异常**
+
+
+
+- **列举最常用的五种RuntimeException:**  
+
+这是JAVA认证考试中最常见的题目,事实上,runtime exception中最常见的,经常碰到的,也就5,6种,如下:
+
+| ArithmeticException                                          | int a=0; int b= 3/a;                                      |
+| ------------------------------------------------------------ | --------------------------------------------------------- |
+| ClassCastException：                                         | Object x = new Integer(0); System.out.println((String)x); |
+| IndexOutOfBoundsException   ArrayIndexOutOfBoundsException,   StringIndexOutOfBoundsException | int [] numbers = { 1, 2, 3 }; int sum = numbers[3];       |
+| IllegalArgumentException 非法参数异常  NumberFormatException | int a = Interger.parseInt("test");                        |
+| NullPointerExceptionextends                                  |                                                           |
+
+
+
+- **除了RuntimeException，其他继承自java.lang.Exception得异常统称为Checked Exception,他们有多少种呢?**
+
+下面是JDK API中列出的异常类:
+除了**RuntimeException以外的,都是checked Exception
+**
+
+java.lang.Object  java.lang.Throwable    java.lang.Exception 所有已实现的接口： Serializable 直接已知子类： AclNotFoundException, ActivationException, AlreadyBoundException, ApplicationException, AWTException, BackingStoreException, BadAttributeValueExpException, BadBinaryOpValueExpException, BadLocationException, BadStringOperationException, BrokenBarrierException, CertificateException, ClassNotFoundException, CloneNotSupportedException, DataFormatException, DatatypeConfigurationException, DestroyFailedException, ExecutionException, ExpandVetoException, FontFormatException, GeneralSecurityException, GSSException, IllegalAccessException, IllegalClassFormatException, InstantiationException, InterruptedException, IntrospectionException, InvalidApplicationException, InvalidMidiDataException, InvalidPreferencesFormatException, InvalidTargetObjectTypeException, InvocationTargetException, IOException, JAXBException, JMException, KeySelectorException, LastOwnerException, LineUnavailableException, MarshalException, MidiUnavailableException, MimeTypeParseException, MimeTypeParseException, NamingException, NoninvertibleTransformException, NoSuchFieldException, NoSuchMethodException, NotBoundException, NotOwnerException, ParseException, ParserConfigurationException, PrinterException, PrintException, PrivilegedActionException, PropertyVetoException, RefreshFailedException, RemarshalException, **RuntimeException**, SAXException, ScriptException, ServerNotActiveException, SOAPException, SQLException, TimeoutException, TooManyListenersException, TransformerException, TransformException, UnmodifiableClassException, UnsupportedAudioFileException, UnsupportedCallbackException, UnsupportedFlavorException, UnsupportedLookAndFeelException, URIReferenceException, URISyntaxException, UserException, XAException, XMLParseException, XMLSignatureException, XMLStreamException, XPathException 
+
+
+
+
+
 三、 异常处理的机制
       在 Java 应用程序中，异常处理机制为：抛出异常，捕捉异常。
          1. 抛出异常：当一个方法出现错误引发异常时，方法创建异常对象并交付运行时系统，异常对象中包含了异常类型和异常出现时的程序状态等异常信息。运行时系统负责寻找处置异常的代码并执行。详细信息请查看公ZH《java架构宝典》。
@@ -2846,6 +2878,84 @@ Exception（异常）:是程序本身可以处理的异常。Exception 类有一
 一个类的实例，而指定的类对象无法被实例化时，抛出该异常
 
 10java.lang.ClassNotFoundException找不到类异常。当应用试图根据字符串形式的类名构造类，而在遍历CLASSPAH之后找不到对应名称的class文件时，抛出该异常。
+
+
+
+#### InterruptedException 异常
+
+当一个方法后面声明可能会抛出InterruptedException 异常时，说明该方法是可能会花一点时间，但是可以取消的方法。
+
+ 
+
+抛InterruptedException的代表方法有：
+
+1. java.lang.Object 类的 wait 方法
+
+2. java.lang.Thread 类的 sleep 方法
+
+3. java.lang.Thread 类的 join 方法
+
+ 
+
+-- 需要花点时间的方法
+
+执行wait方法的线程，会进入等待区等待被notify/notify All。在等待期间，线程不会活动。
+
+执行sleep方法的线程，会暂停执行参数内所设置的时间。
+
+执行join方法的线程，会等待到指定的线程结束为止。
+
+因此，上面的方法都是需要花点时间的方法。
+
+ 
+
+-- 可以取消的方法
+
+因为需要花时间的操作会降低程序的响应性，所以可能会取消/中途放弃执行这个方法。
+
+这里主要是通过interrupt方法来取消。
+
+ 
+
+1. sleep方法与interrupt方法
+
+interrupt方法是Thread类的实例方法，在执行的时候并不需要获取Thread实例的锁定，任何线程在任何时刻，都可以通过线程实例来调用其他线程的interrupt方法。
+
+当在sleep中的线程被调用interrupt方法时，就会放弃暂停的状态，并抛出InterruptedException异常，这样一来，线程的控制权就交给了捕捉这个异常的catch块了。
+
+ 
+
+2. wait方法和interrupt方法
+
+当线程调用wait方法后，线程在进入等待区时，会把锁定接触。当对wait中的线程调用interrupt方法时，会先重新获取锁定，再抛出InterruptedException异常，获取锁定之前，无法抛出InterruptedException异常。
+
+ 
+
+3. join方法和interrupt方法
+
+当线程以join方法等待其他线程结束时，一样可以使用interrupt方法取消。因为join方法不需要获取锁定，故而与sleep一样，会马上跳到catch程序块
+
+ 
+
+-- interrupt方法干了什么？
+
+interrupt方法其实只是改变了中断状态而已。
+
+而sleep、wait和join这些方法的内部会不断的检查中断状态的值，从而自己抛出InterruptEdException。
+
+所以，如果在线程进行其他处理时，调用了它的interrupt方法，线程也不会抛出InterruptedException的，只有当线程走到了sleep, wait, join这些方法的时候，才会抛出InterruptedException。若是没有调用sleep, wait, join这些方法，或者没有在线程里自己检查中断状态，自己抛出InterruptedException，那InterruptedException是不会抛出来的。
+
+ 
+
+isInterrupted方法，可以用来检查中断状态
+
+Thread.interrupted方法，可以用来检查并清除中断状态。
+
+
+
+
+
+
 
 ### 四、相关的问题
 
@@ -2942,6 +3052,24 @@ public class TestEnum {
 
 
 ## 设计模式
+
+单例模式
+
+
+
+代理模式
+
+
+
+策略模式
+
+
+
+工厂模式
+
+
+
+观察者模式
 
 
 
@@ -4351,6 +4479,10 @@ https://www.zhihu.com/question/45022217/answer/425141928
 
 ## JAVA中的锁
 
+通俗易懂 悲观锁、乐观锁、可重入锁、自旋锁、偏向锁、轻量/重量级锁、读写锁、各种锁及其Java实现！ - Pickle Pee的文章 - 知乎 https://zhuanlan.zhihu.com/p/71156910
+
+
+
 Java中有两种加锁的方式：一种是用**synchronized关键字**，另一种是用**Lock接口**的实现类。
 
 形象地说，synchronized关键字是**自动档**，可以满足一切日常驾驶需求。但是如果你想要玩漂移或者各种骚操作，就需要**手动档**了——各种Lock的实现类。
@@ -4374,10 +4506,6 @@ ReadWriteLock其实是一个工厂接口，而ReentrantReadWriteLock是ReadWrite
 乐观锁（Optimistic Lock）, 就是很乐观，每次去拿数据的时候都认为别人不会修改。所以**不会上锁，不会上锁！**但是如果想要更新数据，则会在**更新前检查在读取至更新这段时间别人有没有修改过这个数据**。如果修改过，则重新读取，再次尝试更新，循环上述步骤直到更新成功（当然也允许更新失败的线程放弃操作）。
 
 **悲观锁阻塞事务，乐观锁回滚重试**，它们各有优缺点，不要认为一种一定好于另一种。像乐观锁适用于写比较少的情况下，即冲突真的很少发生的时候，这样可以省去锁的开销，加大了系统的整个吞吐量。但如果经常产生冲突，上层应用会不断的进行重试，这样反倒是降低了性能，所以这种情况下用悲观锁就比较合适。
-
-
-
-
 
 
 
@@ -4675,6 +4803,10 @@ CAS的缺点：
 
 
 
+
+
+
+
 ### 三、自旋锁
 
 有一种锁叫**自旋锁**。所谓自旋，说白了就是一个 while(true) 无限循环。
@@ -4686,6 +4818,14 @@ CAS的缺点：
 不是。尽管自旋与 while(true) 的操作是一样的，但还是应该将这两个术语分开。“自旋”这两个字，特指自旋锁的自旋。
 
 然而在JDK中并没有自旋锁（SpinLock）这个类，那什么才是自旋锁呢？读完下个小节就知道了。
+
+
+
+
+
+
+
+
 
 
 
@@ -4709,6 +4849,242 @@ CAS的缺点：
 > 偏向锁的一个特性是，持有锁的线程在执行完同步代码块时不会释放锁。那么当第二个线程执行到这个synchronized代码块时是否一定会发生锁竞争然后升级为轻量级锁呢？
 > 线程A第一次执行完同步代码块后，当线程B尝试获取锁的时候，发现是偏向锁，会判断线程A是否仍然存活。**如果线程A仍然存活，**将线程A暂停，此时偏向锁升级为轻量级锁，之后线程A继续执行，线程B自旋。但是**如果判断结果是线程A不存在了**，则线程B持有此偏向锁，锁不升级。
 > 还有人对此有疑惑，我之前确实没有描述清楚，但如果要展开讲，涉及到太多新概念，可以新开一篇了。更何况有些太底层的东西，我没读过源码，没有自信说自己一定是对的。其实在升级为轻量级锁之前，虚拟机会让线程A尽快在安全点挂起，然后在它的栈中“伪造”一些信息，让线程A在被唤醒之后，认为自己一直持有的是轻量级锁。如果线程A之前正在同步代码块中，那么线程B自旋等待即可。如果线程A之前不在同步代码块中，它会在被唤醒后检查到这一情况并立即释放锁，让线程B可以拿到。这部分内容我之前也没有深入研究过，如果有说的不对的，请多多指教啊！
+
+
+
+
+
+
+
+
+
+### 五、可重入锁（递归锁）
+
+#### 1、可重入锁的概念
+
+**允许同一个线程多次获取同一把锁**。指的是同一个线程外层函数获得锁之后，内层递归函数仍然能获取该锁的代码，在同一个线程在外层方法获取锁的时候，在进入内层方法会自动获取锁。
+
+也就是说，线程可以进入任何一个他已经拥有锁的所有同步代码块。
+
+Java里只要以Reentrant开头命名的锁都是可重入锁，而且**JDK提供的所有现成的Lock实现类，包括synchronized关键字锁都是可重入的。**
+
+#### 2 . 为什么要可重入
+
+如果线程A继续再次获得这个锁呢?比如一个方法是synchronized,递归调用自己,那么第一次已经获得了锁,第二次调用的时候还能进入吗? 直观上当然需要能进入.这就要求必须是可重入的.可重入锁又叫做递归锁,再举个例子.
+
+```java
+public class Widget {
+        public synchronized void doSomething() {
+            ...
+        }
+}
+     
+public class LoggingWidget extends Widget {
+        public synchronized void doSomething() {
+            System.out.println(toString() + ": calling doSomething");
+            super.doSomething();//若内置锁是不可重入的，则发生死锁
+        }
+}
+```
+
+这个例子是java并发编程实战中的例 子.synchronized 是父类Widget的内置锁,当执行子 类的方法的时候,先获取了一次Widget的锁,然后在执行super的时候,就要获取一次,如果不可重入,那么就跪了.
+
+#### 3 . 如何实现可重入锁
+
+为每个锁关联一个获取计数器和一个所有者线程,当计数值为0的时候,这个所就没有被任何线程只有.当线程请求一个未被持有的锁时,JVM将记下锁的持有者,并且将获取计数值置为1,如果同一个线程再次获取这个锁,技术值将递增,退出一次同步代码块,计算值递减,当计数值为0时,这个锁就被释放.ReentrantLock里面有实现
+
+#### 4 . 有不可重入锁吗
+
+这个还真有.Linux下的pthread_mutex_t锁是默认是非递归的。可以通过设置PTHREAD_MUTEX_RECURSIVE属性，将pthread_mutex_t锁设置为递归锁。如果要自己实现不可重入锁,同可重入锁,这个计数器只能为1.或者0,再次进入的时候,发现已经是1了,就进行阻塞.jdk里面没有默认的实现类.
+
+
+
+#### 5 . demo代码展示
+
+**5.1 内置锁的可重入**
+
+```java
+package syn.Lock.ReentrantLock;
+
+public class ReentrantTest {
+    public void method1() {
+        synchronized (ReentrantTest.class) {
+            System.out.println("方法1获得ReentrantTest的内置锁运行了");
+            method2();
+        }
+    }
+
+    public void method2() {
+        synchronized (ReentrantTest.class) {
+            System.out.println("方法1里面调用的方法2重入内置锁,也正常运行了");
+        }
+    }
+
+    public static void main(String[] args) {
+        new ReentrantTest().method1();
+    }
+}
+```
+
+```java
+方法1获得ReentrantTest的内置锁运行了
+方法1里面调用的方法2重入内置锁,也正常运行了
+```
+
+**5.2 lock对象的可重入**
+
+```java
+package syn.Lock.ReentrantLock;
+
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class ReentrantTest2 {
+        private Lock lock = new ReentrantLock();
+    public void method2() {
+        lock.lock();
+        System.out.println("method2");
+        lock.unlock();
+    }
+
+    public void method1() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException, ClassNotFoundException {
+        lock.lock();
+//        method2();
+        System.out.println("method1");
+//        Method method = ReentrantTest2.class.getMethod("method2");
+//        method.invoke(this, null);
+        method2();
+        lock.unlock();
+    }
+
+
+    public static void main(String[] args) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, ClassNotFoundException {
+        ReentrantTest2 reentrantTest2 = new ReentrantTest2();
+        reentrantTest2.method1();
+    }
+}
+```
+
+```java
+method1
+method2
+```
+
+
+
+
+
+
+
+
+
+
+
+### 六、公平锁、非公平锁
+
+如果多个线程申请一把**公平锁**，那么当锁释放的时候，先申请的先得到，非常公平。显然如果是**非公平锁**，后申请的线程可能先获取到锁，是随机或者按照其他优先级排序的。
+
+对ReentrantLock类而言，通过构造函数传参**可以指定该锁是否是公平锁，默认是非公平锁**。一般情况下，非公平锁的吞吐量比公平锁大，如果没有特殊要求，优先使用非公平锁。
+
+![img](MarkDown_Java%20SE.assets/v2-7a4a72fe7ace46095cd3ca2e6c5212d9_1440w.jpg)ReentrantLock构造器可以指定为公平或非公平
+
+对于synchronized而言，它也是一种**非公平锁**，但是并没有任何办法使其变成公平锁。
+
+
+
+
+
+
+
+
+
+
+
+### 七、可中断锁
+
+可中断锁，字面意思是“可以**响应中断**的锁”。
+
+这里的关键是理解什么是**中断**。Java并没有提供任何直接中断某线程的方法，只提供了**中断机制**。何谓“中断机制”？线程A向线程B发出“请你停止运行”的请求（线程B也可以自己给自己发送此请求），但线程B并不会立刻停止运行，而是自行选择合适的时机以自己的方式响应中断，也可以直接忽略此中断。也就是说，Java的**中断不能直接终止线程**，而是需要被中断的线程自己决定怎么处理。这好比是父母叮嘱在外的子女要注意身体，但子女是否注意身体，怎么注意身体则完全取决于自己。[[2\]](https://zhuanlan.zhihu.com/p/71156910#ref_2)
+
+回到锁的话题上来，如果线程A持有锁，线程B等待获取该锁。由于线程A持有锁的时间过长，线程B不想继续等待了，我们可以让线程B中断自己或者在别的线程里中断它，这种就是**可中断锁**。
+
+在Java中，synchronized就是**不可中断锁**，而Lock的实现类都是**可中断锁，**可以简单看下Lock接口。
+
+```java
+/* Lock接口 */
+public interface Lock {
+
+    void lock(); // 拿不到锁就一直等，拿到马上返回。
+
+    void lockInterruptibly() throws InterruptedException; // 拿不到锁就一直等，如果等待时收到中断请求，则需要处理InterruptedException。
+
+    boolean tryLock(); // 无论拿不拿得到锁，都马上返回。拿到返回true，拿不到返回false。
+
+    boolean tryLock(long time, TimeUnit unit) throws InterruptedException; // 同上，可以自定义等待的时间。
+
+    void unlock();
+
+    Condition newCondition();
+}
+```
+
+
+
+
+
+
+
+
+
+### 八、读写锁、共享锁、互斥锁
+
+读写锁其实是一对锁，一个读锁（共享锁）和一个写锁（互斥锁、排他锁）。
+
+看下Java里的ReadWriteLock接口，它只规定了两个方法，一个返回读锁，一个返回写锁。
+
+![img](MarkDown_Java%20SE.assets/v2-5ec6ed066c75e59c4f3829ca51db8148_1440w.jpg)
+
+记得之前的乐观锁策略吗？所有线程随时都可以读，仅在写之前判断值有没有被更改。
+
+读写锁其实做的事情是一样的，但是策略稍有不同。很多情况下，线程知道自己读取数据后，是否是为了更新它。那么何不在加锁的时候直接明确这一点呢？如果我读取值是为了更新它（SQL的for update就是这个意思），那么加锁的时候就直接加**写锁**，我持有写锁的时候别的线程无论读还是写都需要等待；如果我读取数据仅为了前端展示，那么加锁时就明确地加一个**读锁，**其他线程如果也要加读锁，不需要等待，可以直接获取（读锁计数器+1）。
+
+虽然读写锁感觉与乐观锁有点像，但是**读写锁是悲观锁策略**。因为读写锁并没有在**更新前**判断值有没有被修改过，而是在**加锁前**决定应该用读锁还是写锁。乐观锁特指无锁编程，如果仍有疑惑可以再回到第一、二小节，看一下什么是“乐观锁”。
+
+JDK提供的唯一一个ReadWriteLock接口实现类是ReentrantReadWriteLock。看名字就知道，它不仅提供了读写锁，而是都是可重入锁。 除了两个接口方法以外，ReentrantReadWriteLock还提供了一些便于外界监控其内部工作状态的方法，这里就不一一展开。
+
+
+
+### 九、回到悲观锁和乐观锁
+
+> 这篇文章经历过一次修改，我之前认为偏向锁和轻量级锁是乐观锁，重量级锁和Lock实现类为悲观锁，网上很多资料对这些概念的表述也很模糊，各执一词。
+
+先抛出我的结论：
+
+我们在Java里使用的各种锁，**几乎全都是悲观锁**。synchronized从偏向锁、轻量级锁到重量级锁，全是悲观锁。JDK提供的Lock实现类全是悲观锁。其实只要有“锁对象”出现，那么就一定是悲观锁。因为**乐观锁不是锁，而是一个在循环里尝试CAS的算法。**
+
+那JDK并发包里到底有没有乐观锁呢？
+
+有。java.util.concurrent.atomic包里面的**原子类**都是利用乐观锁实现的。
+
+![img](MarkDown_Java%20SE.assets/v2-98cd919fe09521bac03aa66d6968aeb2_1440w.jpg)
+
+原子类AtomicInteger的自增方法为乐观锁策略
+
+为什么网上有些资料认为偏向锁、轻量级锁是乐观锁？理由是它们底层用到了CAS？或者是把“乐观/悲观”与“轻量/重量”搞混了？其实，线程在抢占这些锁的时候，确实是循环+CAS的操作，感觉好像是乐观锁。但问题的关键是，我们说一个锁是悲观锁还是乐观锁，总是应该站在应用层，看它们是如何锁住应用数据的，而不是站在底层看抢占锁的过程。如果一个线程尝试获取锁时，发现已经被占用，它是否继续读取数据，等后续要更新时再决定要不要重试？对于偏向锁、轻量级锁来说，显然答案是否定的。无论是挂起还是忙等，对应用数据的读取操作都被“挡住”了。从这个角度看，它们确实是悲观锁。
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
