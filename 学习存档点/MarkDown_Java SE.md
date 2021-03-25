@@ -1264,6 +1264,83 @@ JDK1.8 之后 HashMap 的组成多了红黑树，在满足下面两个条件之�
 - 链表长度大于阈值（默认为 8）
 - HashMap 数组长度超过 64
 
+
+
+#### 红黑树
+
+红黑树是一种自平衡的二叉查找树，是一种高效的查找树。红黑树具有良好的效率，它可在 O(logN) 时间内完成查找、增加、删除等操作。因此，红黑树在业界应用很广泛，比如 Java 中的 TreeMap，JDK 1.8 中的 HashMap均是基于红黑树结构实现的。
+
+红黑树通过如下的性质定义实现自平衡：
+
+> 节点是红色或黑色。
+> 根是黑色。
+> 所有叶子都是黑色（叶子是NIL节点）。
+> 每个红色节点必须有两个黑色的子节点。（从每个叶子到根的所有路径上不能有两个连续的红色节点。）
+> 从任一节点到其每个叶子的所有简单路径都包含相同数目的黑色节点（简称黑高）。
+
+
+
+
+
+#### 散列表
+
+散列表(哈希表)，其思想主要是基于数组支持按照下标随机访问数据时间复杂度为O(1)的特性。可是说是数组的一种扩展。
+
+**散列函数**
+
+上面的例子中，截取学号后四位的函数即是一个简单的散列函数。
+
+在这里散列函数的作用就是讲key值映射成数组的索引下标。关于散列函数的设计方法有很多，如:直接寻址法、数字分析法、随机数法等等。但即使是再优秀的设计方法也不能避免散列冲突。在散列表中散列函数不应设计太复杂。
+
+散列函数具有确定性和不确定性。
+
+- 确定性:哈希的散列值不同，那么哈希的原始输入也就不同。即:key1=key2,那么hash(key1)=hash(key2)。
+- 不确定性:同一个散列值很有可能对应多个不同的原始输入。即:key1≠key2，hash(key1)=hash(key2)。
+
+散列冲突,即key1≠key2，hash(key1)=hash(key2)的情况。散列冲突是不可避免的，如果我们key的长度为100，而数组的索引数量只有50，那么再优秀的算法也无法避免散列冲突。关于散列冲突也有很多解决办法，这里简单复习两种：开放寻址法和链表法。
+
+**1 开放寻址法**
+
+开放寻址法的核心思想是，如果出现了散列冲突，我们就重新探测一一个空闲位置，将其插入。比如，我们可以使用线性探测法。当我们往散列表中插入数据时，如果某个数据经过散列函数散列之后，存储位置已经被占用了，我们就从当前位置开始，依次往后查找，看是否有空闲位置，如果遍历到尾部都没有找到空闲的位置，那么我们就再从表头开始找，直到找到为止。
+
+![img](MarkDown_Java%20SE.assets/v2-7ed00efd4a2e417639f32c0152a497eb_1440w.jpg)
+
+散列表中查找元素的时候，我们通过散列函数求出要查找元素的键值对应的散列值，然后比较数组中下标为散列值的元素和要查找的元素。如果相等，则说明就是我们要找的元素；否则就顺序往后依次查找。如果遍历到数组中的空闲位置还没有找到，就说明要查找的元素并没有在散列表中。
+
+对于删除操作稍微有些特别，不能单纯地把要删除的元素设置为空。因为在查找的时候，一旦我们通过线性探测方法，找到一个空闲位置，我们就可以认定散列表中不存在这个数据。但是，如果这个空闲位置是我们后来删除的，就会导致原来的查找算法失效。这里我们可以将删除的元素，特殊标记为 deleted。当线性探测查找的时候，遇到标记为 deleted 的空间，并不是停下来，而是继续往下探测。
+
+线性探测法存在很大问题。当散列表中插入的数据越来越多时，其散列冲突的可能性就越大，极端情况下甚至要探测整个散列表,因此最坏时间复杂度为O(N)。在开放寻址法中，除了线性探测法，我们还可以二次探测和双重散列等方式。
+
+
+
+**2 链表法(拉链法)**
+
+简单来讲就是在冲突的位置拉一条链表来存储数据。
+
+链表法是一种比较常用的散列冲突解决办法,Redis使用的就是链表法来解决散列冲突。链表法的原理是:如果遇到冲突，他就会在原地址新建一个空间，然后以链表结点的形式插入到该空间。当插入的时候，我们只需要通过散列函数计算出对应的散列槽位，将其插入到对应链表中即可。
+
+![img](MarkDown_Java%20SE.assets/v2-a7f9de70b35ecc361c2474c6c22d0a61_1440w.jpg)
+
+ **开放寻址法与链表法比较**
+
+对于开放寻址法解决冲突的散列表，由于数据都存储在数组中，因此可以有效地利用 CPU 缓存加快查询速度(数组占用一块连续的空间)。但是删除数据的时候比较麻烦，需要特殊标记已经删除掉的数据。而且，在开放寻址法中，所有的数据都存储在一个数组中，比起链表法来说，冲突的代价更高。所以，使用开放寻址法解决冲突的散列表，负载因子的上限不能太大。这也导致这种方法比链表法更浪费内存空间。
+
+对于链表法解决冲突的散列表,对内存的利用率比开放寻址法要高。因为链表结点可以在需要的时候再创建，并不需要像开放寻址法那样事先申请好。链表法比起开放寻址法，对大装载因子的容忍度更高。开放寻址法只能适用装载因子小于1的情况。接近1时，就可能会有大量的散列冲突，性能会下降很多。但是对于链表法来说，只要散列函数的值随机均匀，即便装载因子变成10，也就是链表的长度变长了而已，虽然查找效率有所下降，但是比起顺序查找还是快很多。但是，链表因为要存储指针，所以对于比较小的对象的存储，是比较消耗内存的，而且链表中的结点是零散分布在内存中的，不是连续的，所以对CPU缓存是不友好的，这对于执行效率有一定的影响。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #### 底层数据结构分析
 
 #### JDK1.8 之前
@@ -2070,6 +2147,14 @@ public static int[] copyOf(int[] original, int newLength) {
 
 ### static
 
+#### 
+
+```java
+//TODO:
+```
+
+
+
 
 
 
@@ -2139,7 +2224,7 @@ public class Test_transient implements Serializable {
 
 
 
-#### 
+
 
 
 
@@ -2161,9 +2246,17 @@ public class Test_transient implements Serializable {
 
 
 
+### Volatile
 
+（1）多线程主要围绕可见性和原子性两个特性而展开，使用volatile关键字修饰的变量，保证了其在多线程之间的可见性，即每次读取到volatile变量，一定是最新的数据
 
+（2）代码底层执行不像我们看到的高级语言—-Java程序这么简单，它的执行是Java代码–>字节码–>根据字节码执行对应的C/C++代码–>C/C++代码被编译成汇编语言–>和硬件电路交互，现实中，为了获取更好的性能JVM可能会对指令进行重排序，多线程下可能会出现一些意想不到的问题。使用volatile则会对禁止语义重排序，当然这也一定程度上降低了代码执行效率
 
+从实践角度而言，volatile的一个重要作用就是和CAS结合，保证了原子性，详细的可以参见java.util.concurrent.atomic包下的类，比如AtomicInteger。
+
+```java
+//TODO:
+```
 
 
 
@@ -2172,6 +2265,12 @@ public class Test_transient implements Serializable {
 ## 修饰符
 
 **private、default（一般省略）、public、protected**
+
+```java
+//TODO:
+```
+
+
 
 
 
@@ -2555,6 +2654,25 @@ public class TestGeneric {
 
 Java的反射（reflection）机制是指在程序的运行状态中，可以构造任意一个类的对象，可以了解任意一个对象所属的类，可以了解任意一个类的成员变量和方法，可以调用任意一个对象的属性和方法。这种动态获取程序信息以及动态调用对象的功能称为Java语言的反射机制。反射被视为动态语言的关键。
 
+要正确使用Java反射机制就得使用java.lang.Class这个类。它是Java反射机制的起源。当一个类被加载以后，Java虚拟机就会自动产生一个Class对象。通过这个Class对象我们就能获得加载到虚拟机当中这个Class对象对应的方法、成员以及构造方法的声明和定义等信息。
+
+
+### Java反射提供的功能.
+
+1.在运行时判断任何一个对象所属的类
+
+2.在运行时构造任何一个类的对象
+
+3.在运行时判断任何一个类所具有的的成员变量和方法
+
+4.在运行时调用任何一个对象的成员变量和方法
+
+5.生成动态代理
+
+
+
+
+
 ### Class类
 
 对于一个字节码文件.class，虽然表面上我们对该字节码文件一无所知，但该文件本身却记录了许多信息。Java在将.class字节码文件载入时，JVM将产生一个java.lang.Class对象代表该.class字节码文件，从该Class对象中可以获得类的许多基本信息，这就是反射机制。所以要想完成反射操作，就必须首先认识Class类。 [1] 
@@ -2599,6 +2717,903 @@ class clazz = ClassLoader.LoadClass("cn.javaguide.TargetObject");
 ```
 
 通过类加载器获取 Class 对象不会进行初始化，意味着不进行包括初始化等一些列步骤，静态块和静态对象不会得到执行
+
+
+
+
+
+
+
+### **获取类修饰符**
+
+```java
+package Reflection;
+
+import java.lang.reflect.Modifier;
+
+public class ModifiersTest {
+    public static void main(String arts[]) {
+        Class modifiersTestClass = ModifiersTest.class;
+        System.out.println(modifiersTestClass.getModifiers());
+        System.out.println(Modifier.isPublic(modifiersTestClass.getModifiers()));
+
+        Class birdClass = Bird.class;
+        System.out.println(birdClass.getModifiers());
+        System.out.println(Modifier.isPublic(birdClass.getModifiers()));
+
+        Class bird1Class = Bird1.class;
+        System.out.println(bird1Class.getModifiers());
+        System.out.println(Modifier.isPublic(bird1Class.getModifiers()));
+
+        Class bird2Class = Bird2.class;
+        System.out.println(bird2Class.getModifiers());
+        System.out.println(Modifier.isPublic(bird2Class.getModifiers()));
+
+    }
+
+    private class Bird {
+
+    }
+
+    class Bird1 {
+
+    }
+
+    protected class Bird2 {
+
+    }
+}
+```
+
+```java
+1
+true
+2
+false
+0
+false
+4
+false
+```
+
+类修饰符有public、private等类型，getModifiers()可以获取一个类的修饰符，但是返回的结果是int，结合Modifier提供的方法，就可以确认修饰符的类型。
+
+```java
+ Modifier.isAbstract(int modifiers)
+ Modifier.isFinal(int modifiers)
+ Modifier.isInterface(int modifiers)
+ Modifier.isNative(int modifiers)
+ Modifier.isPrivate(int modifiers)
+ Modifier.isProtected(int modifiers)
+ Modifier.isPublic(int modifiers)
+ Modifier.isStatic(int modifiers)
+ Modifier.isStrict(int modifiers)
+ Modifier.isSynchronized(int modifiers)
+ Modifier.isTransient(int modifiers)
+ Modifier.isVolatile(int modifiers)
+```
+
+
+
+### **获取包信息**
+
+```java
+package ReflectionTest;
+
+public class PackageTest {
+    public static void main(String arts[]) {
+
+        Class birdClass = Bird.class;
+        System.out.println(birdClass.getPackage());
+
+    }
+
+    private class Bird {
+
+    }
+}
+```
+
+```java
+package ReflectionTest
+
+Process finished with exit code 0
+```
+
+
+
+### **获取父类的Class对象**
+
+```java
+package ReflectionTest;
+
+public class SuperClassTest {
+    public static void  main(String arts[]){
+
+        Class birdClass = Bird.class;
+        Class superclass = birdClass.getSuperclass();
+        System.out.println(superclass.getSimpleName());
+    }
+
+    private class Bird extends Animal{
+
+    }
+
+    private class Animal{
+
+    }
+}
+```
+
+```java
+Animal
+```
+
+
+
+
+
+### 获取构造函数Constructor
+
+一个类会有多个构造函数，getConstructors()返回的是Constructor[]数组，包含了所有声明的用public修饰的构造函数。
+
+如果你已经知道了某个构造的参数，可以通过下面的方法获取到回应的构造函数对象：
+
+```java
+package ReflectionTest;
+
+import java.lang.reflect.Constructor;
+
+public class ConstructorTest {
+    public static void main(String arts[]) {
+
+        Class birdClass = Bird.class;
+        Constructor[] constructors = birdClass.getConstructors();
+        for (Constructor c : constructors) {
+            System.out.println(c.getName());
+        }
+
+        Class birdClass1 = Bird.class;
+        try {
+            Constructor constructors1 = birdClass.getConstructor(new Class[]{String.class});
+        } catch (NoSuchMethodException e) {
+
+        }
+    }
+
+    private class Bird extends Animal {
+        private int name;
+
+        public Bird() {
+        }
+
+        public Bird(int name) {
+            this.name = name;
+        }
+    }
+
+    private class Animal {
+
+    }
+}
+```
+
+```java
+ReflectionTest.ConstructorTest$Bird
+ReflectionTest.ConstructorTest$Bird
+```
+
+上面获取构造函数的方式有2点需要注意：
+1、只能获取到public修饰的构造函数。
+2、需要捕获NoSuchMethodException异常。
+
+#### **获取构造函数的参数**
+
+获取到构造函数的对象之后，可以通过getParameterTypes()获取到构造函数的参数。
+
+```java
+Constructor constructors = birdClass.getConstructor(new Class[]{String.class});
+            Class[] parameterTypes = constructors.getParameterTypes();
+```
+
+
+
+### **初始化对象**
+
+通过反射获取到构造器之后，通过newInstance()方法就可以生成类对象。
+
+newinstance()方法接受可选数量的参数，必须为所调用的构造函数提供准确的参数。如果构造函数要求String的参数，在调用newinstance()方法是，必须提供String类型的参数。
+
+```java
+package ReflectionTest;
+
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+
+public class ConstructorTest {
+    public static void main(String arts[]) {
+
+        Class birdClass1 = Bird.class;
+        try {
+//            Constructor constructors = birdClass1.getConstructor(new Class[]{String.class});
+            Constructor constructors = birdClass1.getConstructor();
+            Class[] parameterTypes = constructors.getParameterTypes();
+//            Bird bird = (Bird)constructors.newInstance("eat tea");
+            Bird bird = (Bird) constructors.newInstance();
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        } catch (InstantiationException e) {
+            e.printStackTrace();
+        } catch (InvocationTargetException e) {
+            e.printStackTrace();
+        } catch (NoSuchMethodException e) {
+            System.out.println("没有对应的构造函数");
+        }
+    }
+
+    private class Bird extends Animal {
+        private String name;
+
+//        public Bird() {
+//        }
+
+        public Bird(String name) {
+            this.name = name;
+        }
+    }
+
+    private class Animal {
+
+    }
+}
+```
+
+```java
+没有对应的构造函数
+```
+
+
+
+### **获取Methods方法信息**
+
+下面代码是通过反射可以获取到该类的声明的成员方法信息：
+
+```java
+Method[] metchods = birdClass.getMethods();
+Method[] metchods1 = birdClass.getDeclaredMethods();
+Method eatMetchod = birdClass.getMethod("eat", new Class[]{int.class});
+Method eatMetchod1 = birdClass.getDeclaredMethod("eat", new Class[]{int.class});
+```
+
+无参的getMethods()获取到所有public修饰的方法，返回的是Method[]数组。 无参的getDeclaredMethods()方法到的是所有的成员方法，和修饰符无关。 对于有参的getMethods()方法，必须提供要获取的方法名以及方法名的参数。如果要获取的方法没有参数，则用null替代：
+
+```java
+Method eatMetchod = birdClass.getMethod("eat", null);
+```
+
+无参的getMethods()和getDeclaredMethods()都只能获取到类声明的成员方法，不能获取到继承父类的方法。
+
+```java
+package ReflectionTest;
+
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+
+public class ConstructorTest {
+    public static void main(String args[]) {
+
+        Class birdClass = Bird.class;
+        try {
+            //如果内部类,需要加一个参数
+            Constructor constructors = birdClass.getConstructor(ConstructorTest.class, String.class);
+            //如果是内部类需要传入外部类的实例
+            Bird bird = (Bird) constructors.newInstance(new ConstructorTest(), "eat tea");
+
+        } catch (NoSuchMethodException e) {
+            System.out.println("没有对应的构造函数");
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        } catch (InstantiationException e) {
+            e.printStackTrace();
+        } catch (InvocationTargetException e) {
+            e.printStackTrace();
+        }
+    }
+
+    class Bird {
+        private String name;
+
+        public Bird() {
+        }
+
+        public Bird(String name) {
+            this.name = name;
+        }
+    }
+
+
+}
+```
+
+
+
+
+
+**获取Methods方法信息**
+下面代码是通过反射可以获取到该类的声明的成员方法信息：
+
+```java
+Method[] metchods = birdClass.getMethods();
+Method[] metchods1 = birdClass.getDeclaredMethods();
+Method eatMetchod = birdClass.getMethod("eat", new Class[]{int.class});
+Method eatMetchod1 = birdClass.getDeclaredMethod("eat", new Class[]{int.class});
+```
+
+无参的getMethods()获取到所有public修饰的方法，返回的是Method[]数组。 无参的getDeclaredMethods()方法到的是所有的成员方法，和修饰符无关。 对于有参的getMethods()方法，必须提供要获取的方法名以及方法名的参数。如果要获取的方法没有参数，则用null替代：
+
+```java
+Method eatMetchod = birdClass.getMethod("eat", null);
+```
+
+无参的getMethods()和getDeclaredMethods()都只能获取到类声明的成员方法，不能获取到继承父类的方法。
+
+
+
+**获取成员方法参数**
+
+```java
+Class birdClass = Bird.class;
+Class[] parameterTypes = eatMetchod1.getParameterTypes();
+```
+
+**获取成员方法返回类型**
+
+```java
+Class birdClass = Bird.class;
+Class returnType = eatMetchod1.getReturnType();
+```
+
+
+
+**invoke()方法**
+java反射提供invoke()方法，在运行时根据业务需要调用相应的方法，这种情况在运行时非常常见，只要通过反射获取到方法名之后，就可以调用对应的方法：
+
+```java
+Class birdClass = Bird.class;
+Constructor constructors1 = birdClass.getConstructor();
+Method eatMetchod = birdClass.getMethod("eat", new Class[]{int.class});
+System.out.println(eatMetchod.invoke(constructors1.newInstance(), 2));
+```
+
+invoke方法有两个参数，第一个参数是要调用方法的对象，上面的代码中就是Bird的对象，第二个参数是调用方法要传入的参数。如果有多个参数，则用数组。
+
+如果调用的是static方法，invoke()方法第一个参数就用null代替：
+
+```java
+public class Alunbar {
+    public static void  main(String arts[]){
+        try{
+            Class birdClass = Bird.class;
+            Constructor constructors1 = birdClass.getConstructor();
+            Method eatMetchod = birdClass.getMethod("eat", new Class[]{int.class});
+            System.out.println(eatMetchod.invoke(null, 2));
+        }catch(Exception  e){
+            e.printStackTrace();
+            System.out.println("没有对应的构造函数");
+        }
+    }
+
+}
+
+class Bird{
+    public static int eat(int eat){
+        return eat;
+    }
+    public Bird(){
+
+    }
+
+    public Bird(String eat){
+
+    }
+
+    private void talk(){}
+ }
+
+ class Animal{
+     public void run(){
+
+     }
+ }
+```
+
+
+
+
+
+使用反射可以在运行时检查和调用类声明的成员方法，可以用来检测某个类是否有getter和setter方法。getter和setter是java bean必须有的方法。 getter和setter方法有下面的一些规律： getter方法以get为前缀，无参，有返回值 setter方法以set为前缀，有一个参数，返回值可有可无， 下面的代码提供了检测一个类是否有getter和setter方法：
+
+```java
+package ReflectionTest;
+
+import java.lang.reflect.Method;
+
+public class printGettersSetters {
+    public static void main(String[] args) {
+        printGettersSetters(printGettersSetters.class);
+    }
+    public static void printGettersSetters (Class aClass){
+        Method[] methods = aClass.getMethods();
+
+        for (Method method : methods) {
+            if (isGetter(method)) System.out.println("getter: " + method);
+            if (isSetter(method)) System.out.println("setter: " + method);
+        }
+    }
+
+    public static boolean isGetter (Method method){
+        if (!method.getName().startsWith("get")) return false;
+        if (method.getParameterTypes().length != 0) return false;
+        if (void.class.equals(method.getReturnType())) return false;
+        return true;
+    }
+
+    public static boolean isSetter (Method method){
+        if (!method.getName().startsWith("set")) return false;
+        if (method.getParameterTypes().length != 1) return false;
+        return true;
+    }
+}
+```
+
+```java
+getter: public final native java.lang.Class java.lang.Object.getClass()
+
+Process finished with exit code 0
+```
+
+
+
+
+
+### **获取成员变量**
+
+通过反射可以在运行时获取到类的所有成员变量，还可以给成员变量赋值和获取成员变量的值。
+
+```java
+Class birdClass = Bird.class;
+Field[] fields1 = birdClass.getFields();
+Field[] fields2 = birdClass.getDeclaredFields();
+Field fields3 = birdClass.getField("age");
+Field fields4 = birdClass.getDeclaredField("age");
+```
+
+getFields()方法获取所有public修饰的成员变量，getField()方法需要传入变量名，并且变量必须是public修饰符修饰。
+
+getDeclaredFields方法获取所有生命的成员变量，不管是public还是private。
+
+**获取成员变量类型**
+
+```java
+Field fields4 = birdClass.getDeclaredField("age");
+Object fieldType = fields4.getType();
+```
+
+**成员变量赋值和取值**
+一旦获取到成员变量的Field引用，就可以获取通过get()方法获取变量值，通过set()方法给变量赋值：
+
+```java
+Class birdClass = Bird.class;
+Field fields3 = birdClass.getField("age");
+Bird bird = new Bird();
+Object value = fields3.get(bird);
+fields3.set(bird, value);
+```
+
+
+
+**访问私有变量**
+有很多文章讨论禁止通过反射访问一个对象的私有变量，但是到目前为止所有的jdk还是允许通过反射访问私有变量。
+
+使用 Class.getDeclaredField(String name)或者Class.getDeclaredFields()才能获取到私有变量。
+
+```java
+import java.lang.reflect.Field;
+
+public class PrivateField {
+    protected  String name;
+
+    public PrivateField(String name){
+        this.name = name;
+    }
+}
+
+public class PrivateFieldTest {
+    public static void main(String args[])throws Exception{
+        Class privateFieldClass = PrivateField.class;
+        Field privateName = privateFieldClass.getDeclaredField("name");
+        privateName.setAccessible(false);
+        PrivateField privateField = new PrivateField("Alunbar");
+        String privateFieldValue = (String) privateName.get(privateField);
+        System.out.println("私有变量值：" + privateFieldValue);
+    }
+}
+```
+
+上面的代码有点需要注意：必须调用**setAccessible(true)**方法，这是针对私有变量而言，public和protected等都不需要。这个方法是允许通过反射访问类的私有变量。
+
+**访问私有方法**
+和私有变量一样，私有方法也是不允许其他的类随意调用的，但是通过反射可以饶过这一限制。 使用Class.getDeclaredMethod(String name, Class[] parameterTypes)或者Class.getDeclaredMethods()方法获取到私有方法。
+
+```java
+public class PrivateMethod {
+    private String accesPrivateMethod(){
+        return "成功访问私有方法";
+    }
+}
+
+public class PrivateMethodTest {
+    public static void main(String args[])throws Exception{
+        Class privateMethodClass = PrivateMethod.class;
+
+        Method privateStringMethod = privateMethodClass.getDeclaredMethod("accesPrivateMethod", null);
+        privateStringMethod.setAccessible(true);
+        String returnValue = (String)privateStringMethod.invoke(new PrivateMethod(), null);
+
+        System.out.println("returnValue = " + returnValue);
+    }
+}
+```
+
+和访问私有变量一样，也要调用**setAccessible(true)**方法，允许通过反射访问类的私有方法。
+
+
+
+### **访问类注解信息**
+
+通过反射可以在运行时获取到类、方法、变量和参数的注解信息。
+
+访问类的所有注解信息：
+
+```java
+Class aClass = TheClass.class;
+Annotation[] annotations = aClass.getAnnotations();
+
+for(Annotation annotation : annotations){
+    if(annotation instanceof MyAnnotation){
+        MyAnnotation myAnnotation = (MyAnnotation) annotation;
+        System.out.println("name: " + myAnnotation.name());
+        System.out.println("value: " + myAnnotation.value());
+    }
+}
+```
+
+访问类特定的注解信息：
+
+```java
+Class aClass = TheClass.class;
+Annotation annotation = aClass.getAnnotation(MyAnnotation.class);
+
+if(annotation instanceof MyAnnotation){
+    MyAnnotation myAnnotation = (MyAnnotation) annotation;
+    System.out.println("name: " + myAnnotation.name());
+    System.out.println("value: " + myAnnotation.value());
+}
+```
+
+访问方法注解信息：
+
+```java
+Method method = ... //obtain method object
+Annotation[] annotations = method.getDeclaredAnnotations();
+
+for(Annotation annotation : annotations){
+    if(annotation instanceof MyAnnotation){
+        MyAnnotation myAnnotation = (MyAnnotation) annotation;
+        System.out.println("name: " + myAnnotation.name());
+        System.out.println("value: " + myAnnotation.value());
+    }
+}
+```
+
+访问特定方法注解信息：
+
+```java
+Method method = ... // obtain method object
+Annotation annotation = method.getAnnotation(MyAnnotation.class);
+
+if(annotation instanceof MyAnnotation){
+    MyAnnotation myAnnotation = (MyAnnotation) annotation;
+    System.out.println("name: " + myAnnotation.name());
+    System.out.println("value: " + myAnnotation.value());
+}
+```
+
+访问参数注解信息：
+
+```java
+Method method = ... //obtain method object
+Annotation[][] parameterAnnotations = method.getParameterAnnotations();
+Class[] parameterTypes = method.getParameterTypes();
+
+int i=0;
+for(Annotation[] annotations : parameterAnnotations){
+  Class parameterType = parameterTypes[i++];
+
+  for(Annotation annotation : annotations){
+    if(annotation instanceof MyAnnotation){
+        MyAnnotation myAnnotation = (MyAnnotation) annotation;
+        System.out.println("param: " + parameterType.getName());
+        System.out.println("name : " + myAnnotation.name());
+        System.out.println("value: " + myAnnotation.value());
+    }
+  }
+}
+```
+
+Method.getParameterAnnotations()方法返回的是一个二维的Annotation数组，其中包含每个方法参数的注解数组。
+
+访问类所有变量注解信息：
+
+```java
+Field field = ... //obtain field object
+Annotation[] annotations = field.getDeclaredAnnotations();
+
+for(Annotation annotation : annotations){
+    if(annotation instanceof MyAnnotation){
+        MyAnnotation myAnnotation = (MyAnnotation) annotation;
+        System.out.println("name: " + myAnnotation.name());
+        System.out.println("value: " + myAnnotation.value());
+    }
+}
+```
+
+访问类某个特定变量的注解信息：
+
+```java
+Field field = ... // obtain method object
+Annotation annotation = field.getAnnotation(MyAnnotation.class);
+
+if(annotation instanceof MyAnnotation){
+    MyAnnotation myAnnotation = (MyAnnotation) annotation;
+    System.out.println("name: " + myAnnotation.name());
+    System.out.println("value: " + myAnnotation.value());
+}
+```
+
+
+
+### **获取泛型信息**
+
+很多人认为java类在编译的时候会把泛型信息给擦除掉，所以在运行时是无法获取到泛型信息的。其实在某些情况下，还是可以通过反射在运行时获取到泛型信息的。
+
+获取到`java.lang.reflect.Method`对象，就有可能获取到某个方法的泛型返回信息。
+
+**泛型方法返回类型**
+下面的类中定义了一个返回值中有泛型的方法：
+
+```java
+public class MyClass {
+
+  protected List<String> stringList = ...;
+
+  public List<String> getStringList(){
+    return this.stringList;
+  }
+}
+```
+
+下面的代码使用反射检测getStringList()方法返回的是`List<String>`而不是`List`
+
+```java
+Method method = MyClass.class.getMethod("getStringList", null);
+
+Type returnType = method.getGenericReturnType();
+
+if(returnType instanceof ParameterizedType){
+    ParameterizedType type = (ParameterizedType) returnType;
+    Type[] typeArguments = type.getActualTypeArguments();
+    for(Type typeArgument : typeArguments){
+        Class typeArgClass = (Class) typeArgument;
+        System.out.println("typeArgClass = " + typeArgClass);
+    }
+}
+```
+
+上面这段代码会打印：`typeArgClass = java.lang.String`
+
+**泛型方法参数类型**
+下面的类定义了一个有泛型参数的方法setStringList():
+
+```java
+public class MyClass {
+  protected List<String> stringList = ...;
+
+  public void setStringList(List<String> list){
+    this.stringList = list;
+  }
+}
+```
+
+Method类提供了getGenericParameterTypes()方法获取方法的泛型参数。
+
+```java
+method = Myclass.class.getMethod("setStringList", List.class);
+
+Type[] genericParameterTypes = method.getGenericParameterTypes();
+
+for(Type genericParameterType : genericParameterTypes){
+    if(genericParameterType instanceof ParameterizedType){
+        ParameterizedType aType = (ParameterizedType) genericParameterType;
+        Type[] parameterArgTypes = aType.getActualTypeArguments();
+        for(Type parameterArgType : parameterArgTypes){
+            Class parameterArgClass = (Class) parameterArgType;
+            System.out.println("parameterArgClass = " + parameterArgClass);
+        }
+    }
+}
+```
+
+上面的代码会打印出`parameterArgType = java.lang.String`
+
+**泛型变量类型**
+通过反射也可以获取到类的成员泛型变量信息——静态变量或实例变量。下面的类定义了一个泛型变量：
+
+```java
+public class MyClass {
+  public List<String> stringList = ...;
+}
+```
+
+通过反射的Filed对象获取到泛型变量的类型信息：
+
+```java
+Field field = MyClass.class.getField("stringList");
+
+Type genericFieldType = field.getGenericType();
+
+if(genericFieldType instanceof ParameterizedType){
+    ParameterizedType aType = (ParameterizedType) genericFieldType;
+    Type[] fieldArgTypes = aType.getActualTypeArguments();
+    for(Type fieldArgType : fieldArgTypes){
+        Class fieldArgClass = (Class) fieldArgType;
+        System.out.println("fieldArgClass = " + fieldArgClass);
+    }
+}
+```
+
+Field对象提供了getGenericType()方法获取到泛型变量。 上面的代码会打印出：`fieldArgClass = java.lang.String`
+
+
+
+
+
+### **动态代理**
+
+使用反射可以在运行时创建接口的动态实现，java.lang.reflect.Proxy类提供了创建动态实现的功能。我们把运行时创建接口的动态实现称为动态代理。
+
+动态代理可以用于许多不同的目的，例如数据库连接和事务管理、用于单元测试的动态模拟对象以及其他类似aop的方法拦截等。
+
+
+
+**创建代理**
+
+调用java.lang.reflect.Proxy类的newProxyInstance()方法就可以常见动态代理，newProxyInstance()方法有三个参数： 1、用于“加载”动态代理类的类加载器。
+2、要实现的接口数组。 3、将代理上的所有方法调用转发到InvocationHandler的对象。 代码如下：
+
+```java
+InvocationHandler handler = new MyInvocationHandler();
+MyInterface proxy = (MyInterface) Proxy.newProxyInstance(
+                            MyInterface.class.getClassLoader(),
+                            new Class[] { MyInterface.class },
+                            handler);
+```
+
+运行上面代码后，proxy变量包含了MyInterface接口的动态实现。
+
+对代理的所有调用都将由到实现了InvocationHandler接口的handler 对象来处理。
+
+**InvocationHandler**
+如上面说的一样，必须将InvocationHandler的实现传递给Proxy.newProxyInstance()方法。对动态代理的所有方法调用都转发到实现接口的InvocationHandler对象。 InvocationHandler代码：
+
+```java
+public interface InvocationHandler{
+  Object invoke(Object proxy, Method method, Object[] args)
+         throws Throwable;
+}
+```
+
+实现InvocationHandler接口的类：
+
+```java
+public class MyInvocationHandler implements InvocationHandler{
+
+  public Object invoke(Object proxy, Method method, Object[] args)
+  throws Throwable {
+    //do something "dynamic"
+  }
+}
+```
+
+下面详细介绍传递给invoke方法的三个参数。
+
+Object proxy参数，实现接口的动态代理对象。通常不需要这个对象。
+
+Method method参数，表示在动态代理实现的接口上调用的方法。通过Method对象，可以获取到方法名，参数类型，返回类型等信息。
+
+Object[] args参数，包含调用接口中实现的方法时传递给代理的参数值。注意：如果接口中的参数是int、long等基本数据时，这里的args必须使用Integer, Long等包装类型。
+
+上面代码中会生成一个MyInterface接口的对象proxy，通过proxy对象调用的方法都会由MyInvocationHandler类的invoke方法处理。
+
+动态代理使用场景：
+1、数据库连接和事务管理。例如Spring框架有一个事务代理，可以启动和提交/回滚事务
+2、用于单元测试的动态模拟对象
+3、类似AOP的方法拦截。
+
+本文重点介绍了如何通过反射获取到某个类的方法、成员变量、构造函数等信息，同时也介绍动态代理的用法，这些都是反射的基础功能，反射的其他功能里就不一一介绍了。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### **获取接口信息**
+
+获取接口信息的方法：
+
+```java
+Class[] interfaces = birdClass.getInterfaces();
+```
+
+
+
+一个类可以实现多个接口，所以getInterfaces()方法返回的是Class[]数组。 注意：getInterfaces()只返回指定类实现的接口，不会返父类实现的接口。
+
+
+
+
+
+
+
+
 
 ### **反射包reflect中的常用类**
 
@@ -3021,6 +4036,741 @@ public class TestEnum {
 
 ## IO
 
+**java 中 IO 流分为几种？**
+
+按功能来分：输入流（input）、输出流（output）。
+
+按类型来分：字节流和字符流。
+
+字节流和字符流的区别是：字节流按 8 位传输以字节为单位输入输出数据，字符流按 16 位传输以字符为单位输入输出数据。
+
+### IO 概念区分
+
+作者：萧萧
+链接：https://www.zhihu.com/question/19732473/answer/241673170
+来源：知乎
+著作权归作者所有。商业转载请联系作者获得授权，非商业转载请注明出处。
+
+四个相关概念：
+
+- 同步（Synchronous）
+- 异步( Asynchronous)
+- 阻塞( Blocking )
+- 非阻塞( Nonblocking)
+
+让我们看一下《操作系统概念（第九版）》中有关进程间通信的部分是如何解释的：
+
+![img](MarkDown_Java%20SE.assets/v2-d6729b9e95e8f20c4e53215327596692_720w.jpg)
+
+翻译一下就是：
+
+> 进程间的通信是通过 send() 和 receive() 两种基本操作完成的。具体如何实现这两种基础操作，存在着不同的设计。  消息的传递有可能是**阻塞的**或**非阻塞的** – 也被称为**同步**或**异步**的：
+
+- 阻塞式发送（blocking send）. 发送方进程会被一直阻塞， 直到消息被接受方进程收到。
+- 非阻塞式发送（nonblocking send）。 发送方进程调用 send() 后， 立即就可以其他操作。
+- 阻塞式接收（blocking receive） 接收方调用 receive() 后一直阻塞， 直到消息到达可用。
+- 非阻塞式接受（nonblocking receive） 接收方调用 receive() 函数后， 要么得到一个有效的结果， 要么得到一个空值， 即不会被阻塞。
+
+
+
+
+
+#### 进程切换
+
+
+
+![img](MarkDown_Java%20SE.assets/v2-5672054f97fd77f78420fed6b442536e_hd.jpg)![img]
+
+上图展示了进程切换中几个最重要的步骤：
+
+1. 当一个程序正在执行的过程中， 中断（interrupt） 或 系统调用（system call） 发生可以使得 CPU 的控制权会从当前进程转移到操作系统内核。
+2. 操作系统内核负责保存进程 i 在 CPU 中的上下文（程序计数器， 寄存器）到 PCBi （操作系统分配给进程的一个内存块）中。
+3. 从 PCBj 取出进程 j 的CPU 上下文， 将 CPU 控制权转移给进程 j ， 开始执行进程 j 的指令。
+
+
+
+
+
+#### 进程阻塞
+
+
+
+![img](MarkDown_Java%20SE.assets/v2-e88514c2e604c4ac538c402f1788862c_hd.jpg)![img]
+
+上图展示了一个进程的不同状态：
+
+- New. 进程正在被创建.
+- Running. 进程的指令正在被执行
+- Waiting. 进程正在等待一些事件的发生（例如 I/O 的完成或者收到某个信号）
+- Ready. 进程在等待被操作系统调度
+- Terminated. 进程执行完毕（可能是被强行终止的）
+
+我们所说的 “阻塞”是指进程在**发起了一个系统调用**（System Call） 后， 由于该系统调用的操作不能立即完成，需要等待一段时间，于是内核将进程挂起为**等待 （waiting）**状态， 以确保它不会被调度执行， 占用 CPU 资源。
+
+- 友情提示： **在任意时刻， 一个 CPU 核心上（processor）只可能运行一个进程** 。
+
+
+
+#### I/O System Call 的阻塞/非阻塞， 同步/异步
+
+这里再重新审视 **阻塞/非阻塞 IO** 这个概念， 其实**阻塞和非阻塞**描述的是进程的一个操作是否会使得进程转变为“等待”的状态， 但是为什么我们总是把它和 IO 连在一起讨论呢？
+
+原因是， **阻塞**这个词是与系统调用 System Call 紧紧联系在一起的， 因为要让一个进程进入 等待（waiting） 的状态, 要么是它主动调用 wait() 或 sleep() 等挂起自己的操作， 另一种就是它调用 System Call, 而 System Call 因为涉及到了 I/O 操作， 不能立即完成， 于是内核就会先将该进程置为等待状态， 调度其他进程的运行， 等到 它所请求的 I/O 操作完成了以后， 再将其状态更改回 ready 。
+
+操作系统内核在执行 System Call 时， CPU 需要与 IO 设备完成一系列物理通信上的交互， 其实再一次会涉及到阻塞和非阻塞的问题， 例如， 操作系统发起了一个读硬盘的请求后， 其实是向硬盘设备通过总线发出了一个请求，它即可以阻塞式地等待IO 设备的返回结果，也可以非阻塞式的继续其他的操作。 在现代计算机中，这些物理通信操作**基本都是异步完成**的， 即发出请求后， 等待 I/O 设备的中断信号后， 再来读取相应的设备缓冲区。 但是，大部分操作系统默认为用户级应用程序提供的都是**阻塞式的系统调用** （blocking systemcall）接口， 因为阻塞式的调用，使得应用级代码的编写更容易（代码的执行顺序和编写顺序是一致的）。
+
+但同样， 现在的大部分操作系统也会提供非阻塞I/O 系统调用接口（Nonblocking I/O system call）。 一个非阻塞调用不会挂起调用程序， 而是会立即返回一个值， 表示有多少bytes 的数据被成功读取（或写入）。
+
+非阻塞I/O 系统调用( nonblocking system call )的另一个替代品是 **异步I/O系统调用 （asychronous system call）**。 与非阻塞 I/O 系统调用类似，asychronous system call 也是会立即返回， 不会等待 I/O 操作的完成， 应用程序可以继续执行其他的操作， 等到 I/O 操作完成了以后，操作系统会通知调用进程（设置一个用户空间特殊的变量值 或者 触发一个 signal 或者 产生一个软中断 或者 调用应用程序的回调函数）。
+
+此处， **非阻塞I/O 系统调用( nonblocking system call )** 和 **异步I/O系统调用 （asychronous system call）**的区别是：
+
+- 一个**非阻塞I/O 系统调用 read()** 操作立即返回的是任何可以立即拿到的数据， 可以是完整的结果， 也可以是不完整的结果， 还可以是一个空值。
+- 而**异步I/O系统调用** read（）结果必须是完整的， 但是这个操作完成的通知可以延迟到将来的一个时间点。
+
+下图展示了同步I/O 与 异步 I/O 的区别 （非阻塞 IO 在下图中没有绘出）.  
+
+![img](MarkDown_Java%20SE.assets/v2-e0180a5ffebd91c480d0ccdc02c6d2a7_hd.jpg)
+
+注意， 上面提到的 **非阻塞I/O 系统调用( nonblocking system call )** 和 **异步I/O系统调用** 都是非阻塞式的行为（non-blocking behavior）。 他们的差异仅仅是返回结果的方式和内容不同。
+
+#### 总结
+
+1. 阻塞/非阻塞， 同步/异步的概念要注意讨论的上下文：
+
+- 在进程通信层面， 阻塞/非阻塞， 同步/异步基本是同义词， 但是需要注意区分讨论的对象是发送方还是接收方。
+- 发送方阻塞/非阻塞（同步/异步）和接收方的阻塞/非阻塞（同步/异步） 是互不影响的。
+- 在 IO 系统调用层面（ IO system call ）层面， **非阻塞 IO 系统调用** 和 **异步 IO 系统调用**存在着一定的差别， 它们都不会阻塞进程， 但是返回结果的方式和内容有所差别， 但是都属于非阻塞系统调用（ non-blocing system call ）
+
+2. 非阻塞系统调用（non-blocking I/O system call 与 asynchronous I/O system call） 的存在可以用来实现线程级别的 I/O 并发， 与通过多进程实现的 I/O 并发相比可以减少内存消耗以及进程切换的开销。
+
+
+
+#### **BIO、NIO、AIO 有什么区别？**
+
+```java
+//TODO:待完善
+```
+
+https://blog.csdn.net/qq_18297675/article/details/100628025
+
+- BIO：Block IO 同步阻塞式 IO，就是我们平常使用的传统 IO，它的特点是模式简单使用方便，并发处理能力低。
+- NIO：New IO 同步非阻塞 IO，是传统 IO 的升级，客户端和服务器端通过 Channel（通道）通讯，实现了多路复用。
+- AIO：Asynchronous IO 是 NIO 的升级，也叫 NIO2，实现了异步非堵塞 IO ，异步 IO 的操作基于事件和回调机制。
+
+##### BIO
+
+BIOserver
+
+```java
+package BIONIOAIO.BIO;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.ServerSocket;
+import java.net.Socket;
+
+public class BIOserver {
+    public static void main(String[] args) throws IOException {
+        //创建服务端套接字 & 绑定host:port & 监听client
+        ServerSocket serverSocket = new ServerSocket(9999);
+        //等待客户端连接到来
+        Socket socket = serverSocket.accept();
+        //拿到输入流 -- client write to server
+        InputStream in = socket.getInputStream();
+        //拿到输出流 -- server write to client
+        OutputStream out = socket.getOutputStream();
+        while (true){
+            //将数据读到buf中
+            byte[] buf = new byte[32];
+            //server read from client
+            int len = in.read(buf);
+            //如果len == 1，说明client已经断开连接
+            if(len == -1){
+                throw  new RuntimeException("连接已断开");
+            }
+
+            System.out.println("recv:" + new String(buf, 0, len));
+
+            //将读出来的数据写回给client
+            //如果不使用偏移量，可能会将buf中的无效数据也写回给client
+            out.write(buf, 0, len);
+        }
+    }
+
+
+
+}
+```
+
+BIOclient
+
+```java
+package BIONIOAIO.BIO;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.Socket;
+
+public class BIOclient {
+    public static void main(String[] args) throws IOException, InterruptedException {
+        //创建客户端套接字 & 连接服务器
+        Socket socket = new Socket("127.0.0.1", 9999);
+        //拿到输入流 -- server write to client, client read from server
+        InputStream in = socket.getInputStream();
+        //拿到输出流 -- client write to server
+        OutputStream out = socket.getOutputStream();
+        byte[] send = "hello".getBytes();
+        while (true){
+            //client write to server
+            out.write(send);
+            byte[] buf = new byte[32];
+            //read from server
+            int len = in.read(buf, 0 ,send.length);
+            //如果len == 1，说明server已经断开连接
+            if(len == -1){
+                throw  new RuntimeException("连接已断开");
+            }
+            System.out.println("recv:" + new String(buf, 0, len));
+            Thread.sleep(1000);
+        }
+    }
+
+}
+```
+
+
+
+
+
+
+
+##### NIO
+
+Buffer概念
+缓冲区，它的内存分配有两种实现，第一种是jvm堆内存分配缓冲区大小，第二种是直接内存分配缓冲区大小。这两种的详细区别，这里不好展开讲，简单说呢，使用jvm堆内存做缓冲区，易于垃圾回收，速度比直接内存更快，但是将数据拷贝到内核空间却需要两次，第一次是拷贝到对外内存，对外内存再到内核空间。如图
+
+![image-20210325145548991](MarkDown_Java%20SE.assets/image-20210325145548991.png)
+
+
+
+然后，我们来讲本质上，Buffer是这个什么东西，其实它就是一个数组，然后给你提供各种骚操作，仅此而已。
+
+nio就是非阻塞型I/O（non-blocking I/O），它有三个核心的概念：Selector，Channel，Buffer。
+它们的关系就像下图一样
+
+![在这里插入图片描述](MarkDown_Java%20SE.assets/20190424215349475.png)
+
+
+
+
+
+
+
+###### Buffer类
+
+ Buffer 类是 java.nio 的构造基础。一个 Buffer 对象是固定数量的数据的容器，其作用是一个存储器，或者分段运输区，在这里，数据可被存储并在之后用于检索。缓冲区可以被写满或释放。对于每个非布尔原始数据类型都有一个缓冲区类，即 Buffer 的子类有：ByteBuffer、CharBuffer、DoubleBuffer、FloatBuffer、IntBuffer、LongBuffer 和 ShortBuffer，是没有 BooleanBuffer 之说的。尽管缓冲区作用于它们存储的原始数据类型，但缓冲区十分倾向于处理字节。非字节缓冲区可以在后台执行从字节或到字节的转换，这取决于缓冲区是如何创建的。
+
+
+
+***\*◇ 缓冲区的四个属性\**** 
+
+https://blog.csdn.net/luming_xml/article/details/51362528
+
+​    所有的缓冲区都具有四个属性来提供关于其所包含的数据元素的信息，这四个属性尽管简单，但其至关重要，需熟记于心：
+
+- **容量(Capacity)**：缓冲区能够容纳的数据元素的最大数量。这一容量在缓冲区创建时被设定，并且永远不能被改变。
+- **上界(Limit)：**缓冲区的第一个不能被读或写的元素。缓冲创建时，limit 的值等于 capacity 的值。假设 capacity = 1024，我们在程序中设置了 limit = 512，说明，Buffer 的容量为 1024，但是从 512 之后既不能读也不能写，因此可以理解成，Buffer 的实际可用大小为 512。
+- **位置(Position)：**下一个要被读或写的元素的索引。位置会自动由相应的 get() 和 put() 函数更新。 这里需要注意的是positon的位置是从0开始的。
+- **标记(Mark)：**一个备忘位置。标记在设定前是未定义的(undefined)。使用场景是，假设缓冲区中有 10 个元素，position 目前的位置为 2(也就是如果get的话是第三个元素)，现在只想发送 6 - 10 之间的缓冲数据，此时我们可以 buffer.mark(buffer.position())，即把当前的 position 记入 mark 中，然后 buffer.postion(6)，此时发送给 channel 的数据就是 6 - 10 的数据。发送完后，我们可以调用 buffer.reset() 使得 position = mark，因此这里的 mark 只是用于临时记录一下位置用的。
+
+请切记，在使用 Buffer 时，我们实际操作的就是这四个属性的值。 我们发现，Buffer 类并没有包括 get() 或 put() 函数。但是，每一个Buffer 的子类都有这两个函数，但它们所采用的参数类型，以及它们返回的数据类型，对每个子类来说都是唯一的，所以它们不能在顶层 Buffer 类中被抽象地声明。它们的定义必须被特定类型的子类所遵从。若不加特殊说明，我们在下面讨论的一些内容，都是以 ByteBuffer 为例，当然，它当然有 get() 和 put() 方法了。 
+
+
+
+https://ifeve.com/buffers/
+
+**Buffer的分配**
+
+要想获得一个Buffer对象首先要进行分配。 每一个Buffer类都有一个allocate方法。下面是一个分配48字节capacity的ByteBuffer的例子。
+
+```java
+ByteBuffer buf = ByteBuffer.allocate(48);
+```
+
+这是分配一个可存储1024个字符的CharBuffer：
+
+```java
+CharBuffer buf = CharBuffer.allocate(1024);
+```
+
+**向Buffer中写数据**
+
+写数据到Buffer有两种方式：
+
+- 从Channel写到Buffer。
+- 通过Buffer的put()方法写到Buffer里。
+
+从Channel写到Buffer的例子
+
+```java
+int bytesRead = inChannel.read(buf); //read into buffer.
+```
+
+通过put方法写Buffer的例子：
+
+```java
+buf.put(127);
+```
+
+**相对存取和绝对存取**
+
+```java
+public abstract class ByteBuffer extends Buffer implements Comparable { 
+// This is a partial API listing
+public abstract byte get( );  
+public abstract byte get (int index);  
+public abstract ByteBuffer put (byte b);  
+public abstract ByteBuffer put (int index, byte b); 
+} 
+```
+
+   来看看上面的代码，有不带索引参数的方法和带索引参数的方法。不带索引的 get 和 put，这些调用执行完后，position 的值会自动前进。当然，对于 put，如果调用多次导致位置超出上界（注意，是 limit 而不是 capacity），则会抛出 BufferOverflowException 异常；对于 get，如果位置不小于上界（同样是 limit 而不是 capacity），则会抛出 BufferUnderflowException 异常。这种不带索引参数的方法，称为相对存取，相对存取会自动影响缓冲区的位置属性。带索引参数的方法，称为绝对存取，绝对存储不会影响缓冲区的位置属性，但如果你提供的索引值超出范围（负数或不小于上界），也将抛出 IndexOutOfBoundsException 异常。 
+
+
+
+**flip()方法**
+
+flip方法将Buffer从写模式切换到读模式。调用flip()方法会将position设回0，并将limit设置成之前position的值。
+
+换句话说，position现在用于标记读的位置，limit表示之前写进了多少个byte、char等 —— 现在能读取多少个byte、char等。
+
+
+
+
+
+
+
+
+
+**从Buffer中读取数据**
+
+从Buffer中读取数据有两种方式：
+
+1. 从Buffer读取数据到Channel。
+2. 使用get()方法从Buffer中读取数据。
+
+从Buffer读取数据到Channel的例子：
+
+```java
+//read from buffer into channel.
+int bytesWritten = inChannel.write(buf);
+```
+
+使用get()方法从Buffer中读取数据的例子
+
+```java
+byte aByte = buf.get();
+```
+
+```java
+public abstract class ByteBuffer extends Buffer implements Comparable { 
+// This is a partial API listing
+public abstract byte get( );  
+public abstract byte get (int index);  
+public abstract ByteBuffer put (byte b);  
+public abstract ByteBuffer put (int index, byte b); 
+} 
+```
+
+**rewind()方法**
+
+Buffer.rewind()将position设回0，所以你可以重读Buffer中的所有数据。limit保持不变，仍然表示能从Buffer中读取多少个元素（byte、char等）。
+
+**clear()与compact()方法**
+
+一旦读完Buffer中的数据，需要让Buffer准备好再次被写入。可以通过clear()或compact()方法来完成。
+
+如果调用的是clear()方法，position将被设回0，limit被设置成 capacity的值。换句话说，Buffer 被清空了。Buffer中的数据并未清除，只是这些标记告诉我们可以从哪里开始往Buffer里写数据。
+
+如果Buffer中有一些未读的数据，调用clear()方法，数据将“被遗忘”，意味着不再有任何标记会告诉你哪些数据被读过，哪些还没有。
+
+如果Buffer中仍有未读的数据，且后续还需要这些数据，但是此时想要先先写些数据，那么使用compact()方法。
+
+compact()方法将所有未读的数据拷贝到Buffer起始处。然后将position设到最后一个未读元素正后面。limit属性依然像clear()方法一样，设置成capacity。现在Buffer准备好写数据了，但是不会覆盖未读的数据。
+
+```java
+package BIONIOAIO.NIO;
+
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+
+import java.nio.IntBuffer;
+import java.security.SecureRandom;
+
+public class BufferTest {
+    public static void main(String[] args) {
+        //生成一个长度为10的缓冲区
+        IntBuffer intBuffer = IntBuffer.allocate(10);
+        for (int i = 0; i < intBuffer.capacity(); ++i){
+            int randomNum = new SecureRandom().nextInt(20);
+            intBuffer.put(randomNum);
+        }
+        //状态翻转
+        intBuffer.flip();
+        while (intBuffer.hasRemaining()){
+            //读取数据
+            System.out.print(intBuffer.get() + ",");
+        }
+        //clear方法本质上并不是删除数据
+        intBuffer.clear();
+        System.out.print("\n");
+        System.out.println("-----------------------------");
+        while (intBuffer.hasRemaining()){
+            System.out.print(intBuffer.get() + ",");
+        }
+    }
+
+
+}
+```
+
+```java
+9,19,18,0,0,19,18,6,11,12,
+-----------------------------
+9,19,18,0,0,19,18,6,11,12,
+Process finished with exit code 0
+```
+
+可以看到，调用了clear方法以后，缓冲区里的数据并没有被清除。这是什么原因呢，先不急，先改写一下上面的代码。
+
+```java
+package BIONIOAIO.NIO;
+
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+
+import java.nio.IntBuffer;
+import java.security.SecureRandom;
+
+public class BufferTest {
+    public static void main(String[] args) {
+        IntBuffer intBuffer = IntBuffer.allocate(10);
+        System.out.println("初始的Buffer：" + intBuffer);
+        for (int i = 0; i < 5; ++i){
+            int randomNum = new SecureRandom().nextInt(20);
+            intBuffer.put(randomNum);
+        }
+
+        System.out.println("flip之前：limit = "+ intBuffer);
+        intBuffer.flip();
+        System.out.println("flip之后：limit = "+ intBuffer);
+
+        System.out.println("进入读取");
+        while (intBuffer.hasRemaining()){
+            System.out.println(intBuffer);
+            System.out.println(intBuffer.get());
+        }
+    }
+}
+```
+
+```java
+初始的Buffer：java.nio.HeapIntBuffer[pos=0 lim=10 cap=10]
+flip之前：limit = java.nio.HeapIntBuffer[pos=5 lim=10 cap=10]
+flip之后：limit = java.nio.HeapIntBuffer[pos=0 lim=5 cap=10]
+进入读取
+java.nio.HeapIntBuffer[pos=0 lim=5 cap=10]
+2
+java.nio.HeapIntBuffer[pos=1 lim=5 cap=10]
+10
+java.nio.HeapIntBuffer[pos=2 lim=5 cap=10]
+8
+java.nio.HeapIntBuffer[pos=3 lim=5 cap=10]
+10
+java.nio.HeapIntBuffer[pos=4 lim=5 cap=10]
+19
+
+Process finished with exit code 0
+
+```
+
+输出结果中的pos代表的就是`position`属性，lim代表`limit`属性，cap代表`capacity`属性。
+在缓冲区刚初始化出来的时候，position指向的是数组的第一个位置，limit和数组的容量一样。
+用图片来表示大概就如下图
+
+![image-20210325162516884](MarkDown_Java%20SE.assets/image-20210325162516884.png)
+
+向缓冲区中每写入一个数据，指针就会后移一位
+
+![image-20210325162548078](MarkDown_Java%20SE.assets/image-20210325162548078.png)
+
+
+
+当调用了flip()方法后，position又会重新指向数组的第一个位置，而limit会指向原来的position的位置。
+
+![在这里插入图片描述](MarkDown_Java%20SE.assets/20190424232211141.png)
+
+从源码上来看，就是把position赋值给limit，再把position变回0。
+如果用图示的话就如下图：
+
+![image-20210325162620226](MarkDown_Java%20SE.assets/image-20210325162620226.png)
+
+然后再调用get方法的时候，每调用读取一个数据，position就会向后移动一位,直到position到达了limit的位置。实际上intBuffer.hasRemaining()方法就是判断position < limit。
+
+
+
+
+
+
+
+
+
+
+
+
+
+**mark()与reset()方法**
+
+通过调用Buffer.mark()方法，可以标记Buffer中的一个特定position。之后可以通过调用Buffer.reset()方法恢复到这个position。例如：
+
+```java
+buffer.mark();
+//call buffer.get() a couple of times, e.g. during parsing.
+buffer.reset();  //set position back to mark.
+```
+
+
+
+NIOServer
+
+```java
+package BIONIOAIO.NIO;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
+import java.util.Iterator;
+import java.util.Set;
+
+public class NIOServer {
+    public static void main(String[] args) throws IOException {
+        //创建服务端socket通道 & 绑定host:port
+        ServerSocketChannel serverSocketChannel = ServerSocketChannel.open().bind(new InetSocketAddress(9999));
+        //设置为非阻塞模式
+        serverSocketChannel.configureBlocking(false);
+        //新创建一个selector（其实可以为每一个channel单独创建一个selector）
+        Selector selector = Selector.open();
+        //将该通道注册到该selector上，并且注明感兴趣的事件，因为是服务端通道，所以只对accept事件感兴趣
+        serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
+        while (true){
+            //selector会帮我们去轮询，当前是否有我们感兴趣的事件发生，一直阻塞到有为止
+            //select还有一个方法，可以指定阻塞时间，超过这个时间就会返回，此时可能返回的key个数为0
+            selector.select();
+            //若返回的key个数不为0，那么就可以一一处理这些事件
+            Set<SelectionKey> selectionKeys = selector.selectedKeys();
+            Iterator<SelectionKey> iterator = selectionKeys.iterator();
+            while (iterator.hasNext()){
+                SelectionKey selectionKey = iterator.next();
+                //remove是为了下一次select的时候，重复处理这些已经处理过的事件
+                //什么意思呢？其实selector.selectedKeys()返回来的set，就是其
+                //内部操作的set，引用的是同一个set，所以我们如果不在外面remove已经
+                //处理的事件，那么下一次，还会再次出现。需要注意的是，如果在外面对set
+                //进行add操作，会抛异常，简单的说就是在外只删不增，在内只增不删。
+                iterator.remove();
+                //SelectionKey.OP_ACCEPT事件
+                if(selectionKey.isAcceptable()){
+                    SocketChannel socketChannel = ((ServerSocketChannel) selectionKey.channel()).accept();
+                    socketChannel.configureBlocking(false);
+                    socketChannel.register(selector, SelectionKey.OP_READ);
+                    //SelectionKey.OP_READ事件
+                } else if(selectionKey.isReadable()){
+                    //selectionKey.channel()返回的SelectableChannel是SocketChannel的父类
+                    //所以可以直接强转
+                    SocketChannel socketChannel = (SocketChannel)selectionKey.channel();
+                    //NIO规定，必须要用Buffer进行读写
+                    ByteBuffer buffer = ByteBuffer.allocate(32);
+                    int len = socketChannel.read(buffer);
+                    if(len == -1){
+                        throw  new RuntimeException("连接已断开");
+                    }
+                    //上面那一步只是读到缓冲区，这里是从缓冲区真正的拿出数据
+                    byte[] buf = new byte[len];
+                    //这个操作可以举个例子
+                    //例如read(buffer)的时候，其实内部是调用了buffer.put这个方法
+                    //那么read结束，position的位置必定等于len
+                    //所以我们必须重置一下position为0，才可以从头开始读，但是读到什么地方呢？
+                    //那就需要设置limit = position，所以flip后，position=0， limit = len
+                    buffer.flip();
+                    buffer.get(buf);
+                    System.out.println("recv:" + new String(buf, 0, len));
+                    //注册写事件
+                    selectionKey.interestOps(selectionKey.interestOps() | SelectionKey.OP_WRITE);
+                    //SelectionKey.OP_WRITE事件
+                } else if(selectionKey.isWritable()){
+                    SocketChannel socketChannel = (SocketChannel)selectionKey.channel();
+                    //写数据，也要用Buffer来写
+                    int len = socketChannel.write(ByteBuffer.wrap("hello".getBytes()));
+                    if(len == -1){
+                        throw  new RuntimeException("连接已断开");
+                    }
+                    //这里为什么要取消写事件呢？因为只要底层的写缓冲区不满，就会一直收到这个事件
+                    //所以只有想写数据的时候，才要注册这个写事件
+                    selectionKey.interestOps(selectionKey.interestOps() & ~SelectionKey.OP_WRITE);
+                }
+            }
+        }
+    }
+}
+```
+
+
+
+NIOClient
+
+```java
+package BIONIOAIO.NIO;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.SocketChannel;
+import java.util.Iterator;
+import java.util.Set;
+
+public class NIOClient {
+    public static void main(String[] args) throws IOException, InterruptedException {
+        //创建客户端socket通道 & 连接host:port
+        SocketChannel socketChannel = SocketChannel.open();
+        //设置为非阻塞模式
+        socketChannel.configureBlocking(false);
+        //非阻塞的形式连接服务器，如果直接使用open带参数的，连接的时候是阻塞连接
+        socketChannel.connect(new InetSocketAddress("127.0.0.1", 9999));
+        //新创建一个selector
+        Selector selector = Selector.open();
+        //将该通道注册到该selector上，并且注明感兴趣的事件
+        socketChannel.register(selector, SelectionKey.OP_CONNECT | SelectionKey.OP_READ);
+        while (true){
+            selector.select();
+            Set<SelectionKey> selectionKeys = selector.selectedKeys();
+            Iterator<SelectionKey> iterator = selectionKeys.iterator();
+            while (iterator.hasNext()){
+                SelectionKey selectionKey = iterator.next();
+                iterator.remove();
+                //连接事件
+                if(selectionKey.isConnectable()){
+                    //看源码的注释可以知道，如果不使用带参数的open，那么需要手动调用这个方法完成连接
+                    //如果是阻塞模式，该方法会阻塞到连接成功，非阻塞模式下，会立刻返回，已连接true，未连接false
+                    if(socketChannel.finishConnect()){
+                        //需要取消连接事件，否则会一直触发该事件,注册写事件
+                        selectionKey.interestOps(selectionKey.interestOps() & ~SelectionKey.OP_CONNECT | SelectionKey.OP_WRITE);
+                    }
+                } else if(selectionKey.isReadable()){
+                    ByteBuffer buffer = ByteBuffer.allocate(32);
+                    int len = socketChannel.read(buffer);
+                    if(len == -1){
+                        throw  new RuntimeException("连接已断开");
+                    }
+                    byte[] buf = new byte[len];
+                    buffer.flip();
+                    buffer.get(buf);
+                    System.out.println("recv:" + new String(buf, 0, len));
+                    selectionKey.interestOps(selectionKey.interestOps() | SelectionKey.OP_WRITE);
+                } else if(selectionKey.isWritable()){
+                    int len = socketChannel.write(ByteBuffer.wrap("hello".getBytes()));
+                    if(len == -1){
+                        throw  new RuntimeException("连接已断开");
+                    }
+                    selectionKey.interestOps(selectionKey.interestOps() & ~SelectionKey.OP_WRITE);
+                    //这个只是控制一下发送数据的速度
+                    Thread.sleep(1000);
+                }
+            }
+        }
+    }
+}
+```
+
+
+
+###### chanel概念
+
+chanel和inputstream / outputstream的区别是，前者是双向的，后者是单向的。也就是说，只要你创建一个chanel，你可以用这个chanel进行读写操作。并且chanel是基于Buffer来操作的，不管是读还是写都需要通过Buffer这个东东。画个图，简单理解一下。
+
+![image-20210325162748827](MarkDown_Java%20SE.assets/image-20210325162748827.png)
+
+
+
+图中很直观的表现出A和B的chanel都是通过Buffer来读写数据的。上图虽然只画了一个Buffer，但是不止可以有一个Buffer，你可以创建一个读Buffer一个写Buffer都是可以的。
+chanel的读写方法，请看定义
+
+```java
+public abstract int read(ByteBuffer buffer)
+public abstract int write(ByteBuffer buffer)
+```
+
+**chanel的两种实现对比**
+FileChannel和SocketChannel，读写的实现的区别FileChannel的读写继承至SeekableByteChannel，SocketChannel继承至ReadableByteChannel
+
+SocketChannel的话，就只需要关注Buffer就行，比较简单。FileChannel不能设置非阻塞，并且看实现，也不能使用selector。
+
+
+
+
+
+![在这里插入图片描述](MarkDown_Java%20SE.assets/20200526114217229.png)
+
+
+
+从图中可以看到，我们不再主动的去请求内核，而是让它有主动通知我们。最终，我们都是在读处理和写处理中，用channel发送/接收数据。
+
+**Channel和Buffer的关系？**
+可以这么类比
+channel.read(buffer)
+buffer.read(buf)
+相当于
+in.read(buf)
+抛开stream和channel的差别，其实只是多了一个缓冲区。如图
+![在这里插入图片描述](MarkDown_Java%20SE.assets/20190910235156880.png)
+
+**使用Buffer的好处？**
+肯定很多人在写demo的时候，觉得Buffer并没有什么用啊？
+因为可能demo一般都这么写
+ByteBuffer buffer = ByteBuffer.allocate(32);
+……
+channel.read(buffer);
+……
+byte[] buf = new byte[32];
+buffer.read(buf);
+瞧，这样不是脱了裤子放屁吗？为什么不直接内核copy到我的buf呢？没错，如果是这样写，确实太鸡肋了，但是这样写，就可以体现出好处了。
+ByteBuffer buffer = ByteBuffer.allocate(1024 * 4);
+……
+channel.read(buffer);
+……
+while(true){
+byte[] buf = new byte[32];
+buffer.read(buf);
+//handle
+}
+如果有1024 * 4个字节，那么没有缓冲区，需要1024 * 4 / 32 次IO操作，
+现在有了缓冲区，那么只需要一次IO操作，其它操作都在内存中进行，是不是高效了很多呢？
+
+
+
+```java
+//TODO:https://blog.csdn.net/qq_18297675/article/details/100628025
+```
+
+
+
 
 
 
@@ -3028,6 +4778,32 @@ public class TestEnum {
 
 
 ## 面向对象
+
+类（Class） 和对象（Object） 是面向对象的核心概念。
+
+- 类是一组相关属性和行为的集合。可以看成一类事物的模板；是一类对象的描述，是抽象的，概念上的定义。
+- 对象是实际存在的该类事物的每个个体，因而也称为实例（instance）.对象必然具备该类事物的属性和行为。
+
+### 三大特征
+
+#### 继承
+
+#### 封装
+
+#### 多态
+
+**多态的实现方式**
+
+**方式一：重写：**
+
+这个内容已经在上一章节详细讲过，就不再阐述，详细可访问：[Java 重写(Override)与重载(Overload)](https://www.runoob.com/java/java-override-overload.html)。
+
+**方式二：接口**
+
+- \1. 生活中的接口最具代表性的就是插座，例如一个三接头的插头都能接在三孔插座中，因为这个是每个国家都有各自规定的接口规则，有可能到国外就不行，那是因为国外自己定义的接口类型。
+- \2. java中的接口类似于生活中的接口，就是一些方法特征的集合，但没有方法的实现。具体可以看 [java接口](https://www.runoob.com/java/java-interfaces.html) 这一章节的内容。
+
+**方式三：抽象类和抽象方法**
 
 
 
@@ -3037,6 +4813,14 @@ public class TestEnum {
 
 ## 接口
 
+#### 
+
+```java
+//TODO:
+```
+
+
+
 
 
 
@@ -3045,6 +4829,14 @@ public class TestEnum {
 
 ## lang 与 util 包
 
+#### 
+
+```java
+//TODO:
+```
+
+
+
 
 
 
@@ -3052,6 +4844,16 @@ public class TestEnum {
 
 
 ## 设计模式
+
+#### 
+
+```java
+//TODO:
+```
+
+
+
+
 
 单例模式
 
@@ -3978,6 +5780,18 @@ JDK1.2 以后，Java 对引用的概念进行了扩充，将引用分为强引�
 
 
 
+#### 常见的垃圾回收器
+
+```java
+//TODO:
+```
+
+
+
+
+
+
+
 
 
 
@@ -4472,6 +6286,22 @@ https://www.zhihu.com/question/45022217/answer/425141928
 - https://blog.csdn.net/xyang81/article/details/7292380
 - https://juejin.im/post/5c04892351882516e70dcc9b
 - http://gityuan.com/2016/01/24/java-classloader/
+
+
+
+
+
+
+
+### Java七个可能存在的内存泄露风险
+
+https://mp.weixin.qq.com/s/SKhAzV4DXf6hBvneQxxnRg
+
+```java
+//TODO:
+```
+
+
 
 
 
@@ -5091,6 +6921,36 @@ JDK提供的唯一一个ReadWriteLock接口实现类是ReentrantReadWriteLock。
 
 
 ## 多线程
+
+
+
+
+
+多线程常见指令
+
+#### 
+
+```java
+//TODO:
+```
+
+
+
+ThreadLocal
+
+https://mp.weixin.qq.com/s/__TDcasN5wWsuogTkRNFaA
+
+java线程池
+
+#### 
+
+```java
+//TODO:
+```
+
+
+
+
 
 
 
