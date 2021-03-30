@@ -6940,27 +6940,80 @@ JDK提供的唯一一个ReadWriteLock接口实现类是ReentrantReadWriteLock。
 
 
 
-1. **初始(NEW)**：新创建了一个线程对象，但还没有调用start()方法。
-2. **运行(RUNNABLE)**：Java线程中将就绪（ready）和运行中（running）两种状态笼统的称为“运行”。
-   线程对象创建后，其他线程(比如main线程）调用了该对象的start()方法。该状态的线程位于可运行线程池中，等待被线程调度选中，获取CPU的使用权，此时处于就绪状态（ready）。就绪状态的线程在获得CPU时间片后变为运行中状态（running）。
-3. **阻塞(BLOCKED)**：表示线程阻塞于锁。阻塞状态是线程阻塞在进入synchronized关键字修饰的方法或代码块(获取锁)时的状态。
-4. **等待(WAITING)**：进入该状态的线程需要等待其他线程做出一些特定动作（通知或中断）。处于这种状态的线程不会被分配CPU执行时间，它们要等待被显式地唤醒，否则会处于无限期等待的状态。
-5. **超时等待(TIMED_WAITING)**：该状态不同于WAITING，它可以在指定的时间后自行返回。处于这种状态的线程不会被分配CPU执行时间，不过无须无限期等待被其他线程显示地唤醒，在达到一定时间后它们会自动唤醒。https://maokun.blog.csdn.net/article/details/99697007
-6. **终止(TERMINATED)**：表示该线程已经执行完毕。
+**初始(NEW)**：新创建了一个线程对象，但还没有调用start()方法。
 
 
 
-多线程常见指令
+**运行(RUNNABLE)**：Java线程中将就绪（ready）和运行中（running）两种状态笼统的称为“运行”。
+线程对象创建后，其他线程(比如main线程）调用了该对象的start()方法。该状态的线程位于可运行线程池中，等待被线程调度选中，获取CPU的使用权，此时处于就绪状态（ready）。就绪状态的线程在获得CPU时间片后变为运行中状态（running）。
+
+
+
+**阻塞(BLOCKED)**：表示线程阻塞于锁。阻塞状态是线程阻塞在进入synchronized关键字修饰的方法或代码块(获取锁)时的状态。
+
+
+
+**等待(WAITING)**：进入该状态的线程需要等待其他线程做出一些特定动作（通知或中断）。处于这种状态的线程不会被分配CPU执行时间，它们要等待被显式地唤醒，否则会处于无限期等待的状态。
+
+
+
+**超时等待(TIMED_WAITING)**：该状态不同于WAITING，它可以在指定的时间后自行返回。处于这种状态的线程不会被分配CPU执行时间，不过无须无限期等待被其他线程显示地唤醒，在达到一定时间后它们会自动唤醒。https://maokun.blog.csdn.net/article/details/99697007
+
+带指定的等待时间的等待线程所处的状态。一个线程处于这一状态是因为用一个指定的正的等待时间（为参数）调用了以下方法中的其一：
+
+- Thread.sleep
+- 带时限（timeout）的 Object.wait
+- 带时限（timeout）的 Thread.join
+- LockSupport.parkNanos
+- LockSupport.parkUntil
+
+那么 wait(1000）相当于自带设有倒计时 1000 毫秒的闹钟，换言之，她在同时等待两个通知，并取决于哪个先到：
+
+- 如果在1000毫秒内，她就收到了乘务员线程的通知从而唤醒，闹钟也随之失效；
+- 反之，超过1000毫秒，还没收到通知，则闹钟响起，此时她则被闹钟唤醒。
+
+换言之，wait 应该总是在循环中调用（waits should always occur in loops），javadoc 中给出了样板代码：
+
+```java
+synchronized(obj){
+	while(<condition doesnothold>) {
+	obj.wait(timeout);
+	...// Perform action appropriate to condition
+	}
+}
+```
+
+简单讲，要避免使用 if 的方式来判断条件，否则一旦线程恢复，就继续往下执行，不会再次检测条件。由于可能存在的“虚假唤醒”，并不意味着条件是满足的，这点甚至对简单的“二人转”的两个线程的 wait/notify 情况也需要注意。
+
+
+
+**终止(TERMINATED)**：表示该线程已经执行完毕。
+
+
+
+#### 多线程常见指令
+
+首先，wait()和notify()，notifyAll()是**Object**类的方法，sleep()和yield()是**Thread**类的方法。
 
 **sleep()**
 
 Thread.sleep(long millis)，一定是当前线程调用此方法，当前线程进入TIMED_WAITING状态，但**不释放对象锁**，millis后线程自动苏醒进入就绪状态。作用：给其它线程执行机会的最佳方式。
 
+操作系统中，CPU竞争有很多种策略。Unix系统使用的是时间片算法，而Windows则属于抢占式的。在时间片算法中，所有的进程排成一个队列。操作系统按照他们的顺序，给每个进程分配一段时间，即该进程允许运行的时间。如果在 时间片结束时进程还在运行，则CPU将被剥夺并分配给另一个进程。如果进程在时间片结束前阻塞或结束，则CPU当即进行切换。调度程 序所要做的就是维护一张就绪进程列表，当进程用完它的时间片后，它被移到队列的末尾。
+所谓抢占式操作系统，就是说如果一个进程得到了 CPU 时间，除非它自己放弃使用 CPU ，否则将完全霸占 CPU 。当进程执行完毕或者自己主动挂起后，操作系统就会重新计算一 次所有进程的总优先级，然后再挑一个优先级最高的把 CPU 控制权交给他。
+
+Sleep函数就是干这事的，他告诉操作系统“在未来的多少毫秒内我不参与CPU竞争”。
+
+Thread.Sleep(0)的作用，就是“触发操作系统立刻重新进行一次CPU竞争”。竞争的结果也许是当前线程仍然获得CPU控制权，也许会换成别的线程获得CPU控制权。这也是我们在大循环里面经常会写一句Thread.Sleep(0) ，因为这样就给了其他线程比如Paint线程获得CPU控制权的权力，这样界面就不会假死在那里。
 
 
 **wait**()
 
 obj.wait()，当前线程调用对象的wait()方法，wait()的作用是让当前线程进入等待状态，同时，**wait()也会让当前线程释放它所持有的锁**，进入等待队列。而notify()和notifyAll()的作用，则是唤醒当前对象上的等待线程；notify()是唤醒单个线程，而notifyAll()是唤醒所有的线程，或者wait(long timeout) timeout时间到自动唤醒。
+
+没有参数的 wait() 等价于 wait(0)，而 wait(0) 它不是等0毫秒，恰恰相反，它的意思是永久的等下去，到天荒地老，除非收到通知。
+
+
 
 
 
@@ -6989,6 +7042,8 @@ wait/notify必须存在于synchronized块中。并且，这三个关键字针对
 
 
 **join()**
+
+thread.join()/thread.join(long millis)，当前线程里调用其它线程t的join方法，当前线程进入WAITING/TIMED_WAITING状态，当前线程不会释放已经持有的对象锁。线程t执行完毕或者millis时间到，当前线程一般情况下进入RUNNABLE状态，也有可能进入BLOCKED状态（因为join是基于wait实现的）。
 
 插队
 
@@ -7158,17 +7213,141 @@ Process finished with exit code 0
 
 Thread.yield()，一定是当前线程调用此方法，当前线程放弃获取的CPU时间片，但不释放锁资源，由运行状态变为就绪状态，让OS再次选择线程。作用：让相同优先级的线程轮流执行，但并不保证一定会轮流执行。实际中无法保证yield()达到让步目的，因为让步的线程还有可能被线程调度程序再次选中。Thread.yield()不会导致阻塞。该方法与sleep()类似，只是不能由用户指定暂停多长时间。
 
+实际上，yield()方法对应了如下操作： 先检测当前是否有相同优先级的线程处于同可运行状态，如有，则把 CPU 的占有权交给此线程，否则继续运行原来的线程。所以yield()方法称为"退让",它把运行机会让给了同等优先级的其他线程。
+
+1、sleep()方法会给其他线程运行的机会，而不考虑其他线程的优先级，因此会给较低线程一个运行的机会;yield()方法只会给相同优先级或者更高优先级的线程一个运行的机会。
+
+2、当线程执行了sleep(long millis)方法后，将转到阻塞状态，参数millis指定睡眠时间;当线程执行了yield()方法后，将转到就绪状态。
+
+3、sleep()方法声明抛出InterruptedException异常，而yield()方法没有声明抛出任何异常
 
 
 
+#### [1114. 按序打印](https://leetcode-cn.com/problems/print-in-order/)
 
 ```java
-//TODO:
+class Foo {
+
+    boolean a = false;
+    boolean b = false;
+    public Foo() {
+        
+    }
+
+    public void first(Runnable printFirst) throws InterruptedException {
+        synchronized(this) {
+            if (!a) {
+                // printFirst.run() outputs "first". Do not change or remove this line.
+                printFirst.run();
+                a = true;
+                this.notifyAll();
+            }
+        }
+
+    }
+
+    public void second(Runnable printSecond) throws InterruptedException {
+        synchronized(this) {
+            while (!a) {
+                this.wait();
+            }
+            // printSecond.run() outputs "second". Do not change or remove this line.
+            printSecond.run();
+            b = true;
+            this.notifyAll();
+        }
+
+    }
+
+    public void third(Runnable printThird) throws InterruptedException {
+        synchronized(this) {
+            while (!b) {
+                this.wait();
+            }
+            // printThird.run() outputs "third". Do not change or remove this line.
+            printThird.run();
+        }
+    }
+}
 ```
 
 
 
+ReentrantLock
 
+```java
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+class Foo {
+
+    int num;
+    Lock lock;
+    //精确的通知和唤醒线程
+    Condition condition1, condition2, condition3;
+
+    public Foo() {
+        num = 1;
+        lock = new ReentrantLock();
+        condition1 = lock.newCondition();
+        condition2 = lock.newCondition();
+        condition3 = lock.newCondition();
+    }
+
+    public void first(Runnable printFirst) throws InterruptedException {
+        lock.lock();
+        try {
+            while (num != 1) {
+                condition1.await();
+            }
+            // printFirst.run() outputs "first". Do not change or remove this line.
+            printFirst.run();
+            num = 2;
+            condition2.signal();
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void second(Runnable printSecond) throws InterruptedException {
+        lock.lock();
+        try {
+            while (num != 2) {
+                condition2.await();
+            }
+            // printSecond.run() outputs "second". Do not change or remove this line.
+            printSecond.run();
+            num = 3;
+            condition3.signal();
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void third(Runnable printThird) throws InterruptedException {
+        lock.lock();
+        try {
+            while (num != 3) {
+                condition3.await();
+            }
+            // printThird.run() outputs "third". Do not change or remove this line.
+            printThird.run();
+            // num = 4;
+            // condition1.signal();
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            lock.unlock();
+        }
+    }
+}
+
+```
 
 
 
@@ -8313,4 +8492,18 @@ private static final int TERMINATED =  3 << COUNT_BITS;
 - 该状态表示线程池彻底终止
 
 
+
+
+
+
+
+
+
+## JAVA 8 新特性
+
+
+
+
+
+### Lambda表达式(Lambda expressions)
 
