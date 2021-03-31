@@ -2246,17 +2246,275 @@ public class Test_transient implements Serializable {
 
 
 
-### Volatile
+### volatile
 
-（1）多线程主要围绕可见性和原子性两个特性而展开，使用volatile关键字修饰的变量，保证了其在多线程之间的可见性，即每次读取到volatile变量，一定是最新的数据
+（1）多线程主要围绕可见性和原子性两个特性而展开，使用volatile关键字修饰的变量，保证了其在多线程之间的可见性，即每次读取到volatile变量，一定是最新的数据，volatile保证**可见性(Visibility)**和**有序性（Ordering）**，不能保证**原子性(Atomicity)**。
 
 （2）代码底层执行不像我们看到的高级语言—-Java程序这么简单，它的执行是Java代码–>字节码–>根据字节码执行对应的C/C++代码–>C/C++代码被编译成汇编语言–>和硬件电路交互，现实中，为了获取更好的性能JVM可能会对指令进行重排序，多线程下可能会出现一些意想不到的问题。使用volatile则会对禁止语义重排序，当然这也一定程度上降低了代码执行效率
 
 从实践角度而言，volatile的一个重要作用就是和CAS结合，保证了原子性，详细的可以参见java.util.concurrent.atomic包下的类，比如AtomicInteger。
 
+
+
+小demo：永远都不会输出**有点东西**这一段代码，按道理线程改了flag变量，主线程也能访问到的呀？为会出现这个情况呢？
+
 ```java
-//TODO:
+package Test;
+
+public class volatileTest {
+    public static void main(String[] args) {
+        flagClass flagClass = new flagClass();
+        flagClass.start();
+        for (; ; ) {
+            if(flagClass.isFlag()){
+                System.out.println("eh?");
+            }
+        }
+    }
+}
+
+class flagClass extends Thread {
+    private boolean flag = false;
+
+    public boolean isFlag() {
+        return flag;
+    }
+
+    @Override
+    public void run() {
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        flag = true;
+        System.out.println("成功更改flag");
+    }
+}
 ```
+
+```java
+成功更改flag
+
+```
+
+见JMM
+
+#### **总结**
+
+1. volatile修饰符适用于以下场景：某个属性被多个线程共享，其中有一个线程修改了此属性，其他线程可以立即得到修改后的值，比如booleanflag;或者作为触发器，实现轻量级同步。
+2. volatile属性的读写操作都是无锁的，它不能替代synchronized，因为它没有提供原子性和互斥性。因为无锁，不需要花费时间在获取锁和释放锁_上，所以说它是低成本的。
+3. volatile只能作用于属性，我们用volatile修饰属性，这样compilers就不会对这个属性做指令重排序。
+4. volatile提供了可见性，任何一个线程对其的修改将立马对其他线程可见，volatile属性不会被线程缓存，始终从主 存中读取。
+5. volatile提供了happens-before保证，对volatile变量v的写入happens-before所有其他线程后续对v的读操作。
+6. volatile可以使得long和double的赋值是原子的。
+7. volatile可以在单例双重检查中实现可见性和禁止指令重排序，从而保证安全性。
+
+
+
+
+
+## **JMM**
+
+`JMM`：Java内存模型，是java虚拟机规范中所定义的一种内存模型，描述了**Java程序中各种变量(线程共享变量)的访问规则**，以及在JVM中**将变量存储到内存和从内存中读取变量**这样的底层细节。
+
+Java内存模型是标准化的，屏蔽掉了底层不同计算机的区别（`注意这个跟JVM完全不是一个东西，只有还有小伙伴搞错的`）。
+
+Java内存模型(Java Memory Model，JMM)JMM主要是为了规定了**线程和内存之间**的一些关系。根据JMM的设计，系统存在一个主内存(Main Memory)，Java中所有变量都储存在**主存**中，对于所有线程都是共享的。每条线程都有自己的**工作内存**(Working Memory)，工作内存中保存的是主存中**某些变量的拷贝**，线程对所有变量的操作都是在工作内存中进行，线程之间无法相互直接访问，变量传递均需要通过主存完成。
+
+![image-20210330220554976](MarkDown_Java%20SE.assets/image-20210330220554976.png)
+
+### **jvm和jmm之间的关系**
+
+jmm中的主内存、工作内存与jvm中的Java堆、栈、方法区等并不是同一个层次的内存划分，这两者基本上是没有关系的，如果两者一定要勉强对应起来，那从变量、主内存、工作内存的定义来看，主内存主要对应于Java堆中的对象实例数据部分，而工作内存则对应于虚拟机栈中的部分区域。从更低层次上说，主内存就直接对应于物理硬件的内存，而为了获取更好的运行速度，虚拟机（甚至是硬件系统本身的优化措施）可能会让工作内存优先存储于寄存器和高速缓存中，因为程序运行时主要访问读写的是工作内存。
+
+### **现代计算机的内存模型**
+
+![image-20210330221653312](MarkDown_Java%20SE.assets/image-20210330221653312.png)
+
+
+
+
+
+### **JMM有以下规定：**
+
+所有的共享变量都存储于主内存，这里所说的变量指的是实例变量和类变量，不包含局部变量，因为局部变量是线程私有的，因此不存在竞争问题。
+
+每一个线程还存在自己的工作内存，线程的工作内存，保留了被线程使用的变量的工作副本。
+
+`线程对变量的所有的操作(读，取)都必须在工作内存中完成，而不能直接读写主内存中的变量`。
+
+不同线程之间也不能直接访问对方工作内存中的变量，线程间变量的值的传递需要通过主内存中转来完成。
+
+### **本地内存和主内存的关系：**
+
+![img](MarkDown_Java%20SE.assets/v2-f0364f6f863d5730e2b962ac6b3387e2_720w.jpg)
+
+正是因为这样的机制，才导致了可见性问题的存在，那我们就讨论下可见性的解决方案。
+
+### **可见性的解决方案**
+
+
+
+#### **加锁**
+
+```java
+public static void main(String[] args) {
+    flagClass flagClass = new flagClass();
+    flagClass.start();
+    for (; ; ) {
+        synchronized (flagClass){
+            if(flagClass.isFlag()){
+                System.out.println("eh?");
+            }
+        }
+    }
+}
+```
+
+**为啥加锁可以解决可见性问题呢？**
+
+因为某一个线程进入synchronized代码块前后，线程会获得锁，清空工作内存，从主内存拷贝共享变量最新的值到工作内存成为副本，执行代码，将修改后的副本的值刷新回主内存中，线程释放锁。
+
+而获取不到锁的线程会阻塞等待，所以变量的值肯定一直都是最新的。
+
+
+
+#### **Volatile修饰共享变量**
+
+```java
+package Test;
+
+public class volatileTest {
+    public static void main(String[] args) {
+        flagClass flagClass = new flagClass();
+        flagClass.start();
+        for (; ; ) {
+            if(flagClass.isFlag()){
+                System.out.println("eh?");
+            }
+        }
+    }
+}
+
+class flagClass extends Thread {
+    private volatile boolean flag = false;
+
+    public boolean isFlag() {
+        return flag;
+    }
+
+    @Override
+    public void run() {
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        flag = true;
+        System.out.println("成功更改flag");
+    }
+}
+```
+
+##### **Volatile做了啥？**
+
+每个线程操作数据的时候会把数据从主内存读取到自己的工作内存，如果他操作了数据并且写会了，他其他已经读取的线程的变量副本就会失效了，需要都数据进行操作又要再次去主内存中读取了。
+
+volatile保证不同线程对共享变量操作的可见性，也就是说一个线程修改了volatile修饰的变量，当修改写回主内存时，另外一个线程立即看到最新的值。
+
+
+
+##### **禁止指令重排序**
+
+**什么是重排序?**
+
+为了提高性能，编译器和处理器常常会对既定的代码执行顺序进行指令重排序。
+
+**重排序的类型有哪些呢？源码到最终执行会经过哪些重排序呢？**
+
+![img](MarkDown_Java%20SE.assets/v2-8ce58830ca5051bbb5deff4e9bc22599_720w.jpeg)
+
+一个好的内存模型实际上会放松对处理器和编译器规则的束缚，也就是说软件技术和硬件技术都为同一个目标，而进行奋斗：在不改变程序执行结果的前提下，尽可能提高执行效率。
+
+JMM对底层尽量减少约束，使其能够发挥自身优势。
+
+因此，在执行程序时，为了提高性能，编译器和处理器常常会对指令进行重排序。
+
+一般重排序可以分为如下三种：
+
+- 编译器优化的重排序。编译器在不改变单线程程序语义的前提下，可以重新安排语句的执行顺序;
+- 指令级并行的重排序。现代处理器采用了指令级并行技术来将多条指令重叠执行。如果不存在数据依赖性，处理器可以改变语句对应机器指令的执行顺序;
+- 内存系统的重排序。由于处理器使用缓存和读/写缓冲区，这使得加载和存储操作看上去可能是在乱序执行的。
+
+
+
+##### **那Volatile是怎么保证不会被执行重排序的呢？**
+
+**内存屏障**
+
+java编译器会在生成指令系列时在适当的位置会插入`内存屏障`指令来禁止特定类型的处理器重排序。
+
+为了实现volatile的内存语义，JMM会限制特定类型的编译器和处理器重排序，JMM会针对编译器制定volatile重排序规则表：
+
+![preview](MarkDown_Java%20SE.assets/v2-63d3537f6b66726613bf30627c0dbd00_r.jpg)
+
+
+
+
+
+**as-if-serial**
+
+不管怎么重排序，单线程下的执行结果不能被改变。
+
+编译器、runtime和处理器都必须遵守as-if-serial语义。
+
+
+
+
+
+JMM具备一些先天的**有序性**,即不需要通过任何手段就可以保证的有序性，通常称为**happens-before**原则。`<<JSR-133：Java Memory Model and Thread Specification>>`定义了如下happens-before规则：
+
+1. **程序顺序规则**： 一个线程中的每个操作，happens-before于该线程中的任意后续操作
+2. **监视器锁规则**：对一个线程的解锁，happens-before于随后对这个线程的加锁
+3. **volatile变量规则**： 对一个volatile域的写，happens-before于后续对这个volatile域的读
+4. **传递性**：如果A happens-before B ,且 B happens-before C, 那么 A happens-before C
+5. **start()规则**： 如果线程A执行操作`ThreadB_start()`(启动线程B) , 那么A线程的`ThreadB_start()`happens-before 于B中的任意操作
+6. **join()原则**： 如果A执行`ThreadB.join()`并且成功返回，那么线程B中的任意操作happens-before于线程A从`ThreadB.join()`操作成功返回。
+7. **interrupt()原则**： 对线程`interrupt()`方法的调用先行发生于被中断线程代码检测到中断事件的发生，可以通过`Thread.interrupted()`方法检测是否有中断发生
+8. **finalize()原则**：一个对象的初始化完成先行发生于它的`finalize()`方法的开始
+
+
+
+**当写一个volatile变量时，JMM会把该线程对应的本地内存中的共享变量刷新到主内存**
+
+**当读一个volatile变量时，JMM会把该线程对应的本地内存置为无效，线程接下来将从主内存中读取共享变量。**
+
+
+
+**面试官：说的还可以，那你知道volatile底层的实现机制？**
+
+如果把加入volatile关键字的代码和未加入volatile关键字的代码都生成汇编代码，会发现加入volatile关键字的代码会多出一个lock前缀指令。
+
+lock前缀指令实际相当于一个内存屏障，内存屏障提供了以下功能：
+
+1 . 重排序时不能把后面的指令重排序到内存屏障之前的位置
+
+2 . 使得本CPU的Cache写入内存
+
+3 . 写入动作也会引起别的CPU或者别的内核无效化其Cache，相当于让新写入的值对别的线程可见。
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
