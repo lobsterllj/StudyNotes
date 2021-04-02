@@ -45,6 +45,16 @@
 
 
 
+### HTTP
+
+https://blog.csdn.net/zhangliangzi/article/details/51336564
+
+
+
+
+
+
+
 ## 传输层
 
 

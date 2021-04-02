@@ -154,13 +154,27 @@ end回答2
 
 
 
+## Spring
+
+
+
+### @Bean
 
 
 
 
 
 
-SpringMVC
+
+
+
+
+
+
+
+
+
+## SpringMVC
 
 
 
@@ -171,3 +185,8 @@ SpringMVC
 ![2020071914335890](MarkDown_Java%20EE.assets/2020071914335890.png)
 
 ![20200719143342368](MarkDown_Java%20EE.assets/20200719143342368.png)
+
+
+
+
+
