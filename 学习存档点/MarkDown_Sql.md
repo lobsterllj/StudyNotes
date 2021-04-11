@@ -274,7 +274,9 @@ update tb_student A set A.age='19' where A.name=' 张三 ';
 
 
 
-#### redo log 与 crash safe
+#### redolog
+
+##### redo log 与 crash safe
 
 http://www.360doc.com/content/21/0209/10/58006001_961412061.shtml
 
@@ -290,8 +292,9 @@ https://baijiahao.baidu.com/s?id=1657491030064034525&wfr=spider&for=pc
 
 
 
-
  write pos 是当前记录的位置，一边写一边后移，写到第 3 号文件末尾后就回到 0 号文件开头。checkpoint 是当前要擦除的位置，也是往后推移并且循环的，擦除记录前要把记录更新到数据文件。write pos 和 checkpoint 之间的是还空着的部分，可以用来记录新的操作。如果 write pos 追上 checkpoint，表示redo log满了，这时候不能再执行新的更新，得停下来先擦掉一些记录，把 checkpoint 推进一下。有了 redo log，InnoDB 就可以保证即使数据库发生异常重启，之前提交的记录都不会丢失，这个能力称为 **crash-safe**。
+
+
 
 #### binlog
 
@@ -306,12 +309,148 @@ MySQL 整体来看，其实就有两块：一块是 Server 层，它主要做的
 
 #### UNDO LOG
 
-undo log 主要用于保证数据的原子性，保存了事务发生之前的数据的一个版本，可以用于回滚。比如一条 INSERT 语句，对应一条 DELETE 的 undo log ，对于每个 UPDATE 语句，对应一条相反的 UPDATE 的 undo log ，这样在发生错误时，就能回滚到事务之前的数据状态。同时，undo log 也是 MVCC (多版本并发控制) 实现的关键。
+undo log有两个作用：提供回滚和多个行版本控制(MVCC)。
+
+在数据修改的时候，不仅记录了redo，还记录了相对应的undo，如果因为某些原因导致事务失败或回滚了，可以借助该undo进行回滚。
+
+undo log和redo log记录物理日志不一样，它是**逻辑日志**。**可以认为当delete一条记录时，undo log中会记录一条对应的insert记录，反之亦然，当update一条记录时，它记录一条对应相反的update记录。**
+
+当执行rollback时，就可以从undo log中的逻辑记录读取到相应的内容并进行回滚。有时候应用到**行版本控制**的时候，也是通过undo log来实现的：当读取的某一行被其他事务锁定时，它可以**从undo log中分析出该行记录以前的数据是什么**，**从而提供该行版本信息，让用户实现非锁定一致性读取**。
+
+**undo log****是采用**段(segment)**的方式来记录的，每个undo操作在记录的时候占用一个**undo log segment**。
+
+另外，**undo log**也会产生**redo log**，因为undo log也要**实现持久性保护**。
+
+
+
+undo log和redolog 主要用于保证数据的原子性，保存了事务发生之前的数据的一个版本，可以用于回滚。比如一条 INSERT 语句，对应一条 DELETE 的 undo log ，对于每个 UPDATE 语句，对应一条相反的 UPDATE 的 undo log ，这样在发生错误时，就能回滚到事务之前的数据状态。同时，undo log 也是 MVCC (多版本并发控制) 实现的关键。
 
 重做日志记录了事务的行为,可以很好地通过其对页进行“重做”操作。但是事务有时还需要进行回滚操作,这时就需要undo。因此在对数据库进行修改时, InnoDB存储引擎不但会产生redo,还会产生一定量的undo。
 redo存放在重做日志文件中,与redo不同,undo存放在数据库内部的一个特殊段(segment)中,这个段称为undo段(undo segment)。undo段位于共享表空间内。
 除了回滚操作,undo的另一个作用是MVCC,即在 InnoDB存储引擎中MVCC的实现是通过undo来完成。当用户读取一行记录时,若该记录已经被其他事务占用,当前事务可以通过undo读取之前的行版本信息,以此实现非锁定读取。
 **undo log会产生redo log,也就是undo log的产生会伴随着 redo log的产生,这是因为undo log也需要持久性的保护。**
+
+
+
+
+
+
+
+
+
+
+
+![img](MarkDown_Sql.assets/11512754-1478bc80d668c2f8.png)
+
+
+
+####  redo log和二进制日志（binlog）的区别
+
+https://www.cnblogs.com/f-ck-need-u/p/9010872.html
+
+innodb事务日志包括redo log和undo log。redo log是重做日志，提供前滚操作，undo log是回滚日志，提供回滚操作。
+
+undo log不是redo log的逆向过程，其实它们都算是用来恢复的日志：
+
+**1.redo log通常是物理日志，记录的是数据页的物理修改，而不是某一行或某几行修改成怎样怎样，它用来恢复提交后的物理数据页(恢复数据页，且只能恢复到最后一次提交的位置)。**
+**2.undo用来回滚行记录到某个版本。undo log一般是逻辑日志，根据每行记录进行记录。**
+
+redo log不是二进制日志。虽然二进制日志中也记录了innodb表的很多操作，**也能实现重做的功能，**但是它们之间有很大区别。
+
+二进制日志是在**存储引擎的上层**产生的，不管是什么存储引擎，对数据库进行了修改都会产生二进制日志。而redo log是innodb层产生的，只记录该存储引擎中表的修改。**并且二进制日志先于redo log**被记录。
+
+**二进制日志**记录操作的方法是**逻辑性的语句**。即便它是基于行格式的记录方式，其本质也还是逻辑的SQL设置，**如下图**。而**redo log是在物理格式上的日志，它记录的是数据库中每个页的修改（对 XXX表空间中的XXX数据页XXX偏移量的地方作了XXX更新。）。**
+
+```mysql
+mysql> show binlog events ``in` `'mysql-bin.000003'``\G
+*************************** 1. row ***************************
+  ``Log_name: mysql-bin.000003     　　　　　　　　　　　　　　 ----> 查询的binlog日志文件名
+    ``Pos: 4         　　　　　　　　　　　　　　 ----> pos起始点:
+ ``Event_type: Format_desc        　　　　　　　　　　　　　　 ----> 事件类型
+ ``Server_id: 1             　　　　　　　　　　　　　　 ----> 标识是由哪台服务器执行的
+End_log_pos: 120        　　　　　　　　　　　　　　----> pos结束点:120(即：下行的pos起始点)
+    ``Info: use `juzidb`; 
+    INSERT INTO `tb1` VALUES (1,``'UFO'``)  ---> 执行的sql语句
+       
+*************************** 2. row ***************************
+  ``Log_name: mysql-bin.000003
+    ``Pos: 542
+ ``Event_type: Query
+ ``Server_id: 1
+End_log_pos: 625
+    ``Info: BEGIN
+*************************** 3. row ***************************
+  ``Log_name: mysql-bin.000003
+    ``Pos: 946
+ ``Event_type: Query
+ ``Server_id: 1
+End_log_pos: 1044
+    ``Info: drop database juzidb
+```
+
+
+
+**二进制日志**只在每次事务**提交**的时候**一次性写入日志**(对于**非事务表的操作，则是每次执行语句成功后就直接写入**)。而**redo log**在数据准备修改前写入缓存中的redo log中，然后才对缓存中的数据执行修改操作；而且保证**在发出事务提交指令**时，**先向缓存中的redo log写入日志**，**写入完成后才执行提交动作**。
+
+因为**二进制日志只在提交的时候一次性写入**，所以二进制日志中的**记录方式和提交顺序有关**，且**一次提交对应一次记录**。而redo log中是记录的物理页的修改，redo log文件中**同一个事务可能多次记录**，**最后一个提交的事务**记录**会覆盖所有未提交的事务记录**。
+
+事务日志记录的是物理页的情况，它具有**幂等性**，因此记录日志的方式极其简练。**幂等性的意思是多次操作前后状态是一样的，例如新插入一行后又删除该行，前后状态没有变化。**而**二进制日志记录的是所有影响数据的操作**，记录的内容较多。**例如插入一行记录一次，删除该行又记录一次。**
+
+
+
+
+
+
+
+### 什么是事务?
+
+**事务是逻辑上的一组操作，要么都执行，要么都不执行。**
+
+事务最经典也经常被拿出来说例子就是转账了。假如小明要给小红转账1000元，这个转账会涉及到两个关键操作就是：将小明的余额减少1000元，将小红的余额增加1000元。万一在这两个操作之间突然出现错误比如银行系统崩溃，导致小明余额减少而小红的余额没有增加，这样就不对了。事务就是保证这两个关键操作要么都成功，要么都要失败。
+
+
+
+
+
+
+
+### 事务的四大特性(ACID)
+
+[![事务的特性](MarkDown_Sql.assets/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545342542412538422545352538412541312545372538392542392545362538302541372e706e67)](https://camo.githubusercontent.com/a56cfc4add00ae0a268516f154d400fecd22a80b1bde794c8188b1293ee093e7/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545342542412538422545352538412541312545372538392542392545362538302541372e706e67)
+
+1. **原子性（Atomicity）：** 事务是最小的执行单位，不允许分割。事务的原子性确保动作要么全部完成，要么完全不起作用；
+
+   原子性，是基于日志的`Redo/Undo`机制。Redo log用来记录某数据块被修改后的值，可以用来恢复未写入 data file 的已成功事务更新的数据；Undo log是用来记录数据更新前的值，保证数据更新失败能够回滚。假如某个时刻数据库崩溃，在崩溃之前有事务A和事务B在执行，事务A已经提交，而事务B还未提交。当数据库重启进行 crash-recovery 时，就会通过Redo log将已经提交事务的更改写到数据文件，而还没有提交的就通过Undo log进行roll back。
+
+2. **一致性（Consistency）：** 数据库事务的一致性是指：保证事务只能把数据库从一个有效（正确）的状态“转移”到另一个有效（正确）的状态。那么，什么是数据库的有效(正确）的状态？
+
+   ​		一致性是指数据处于一种语义上的有意义且正确的状态。一致性是对数据可见性的约束，保证在一个事务中的多次操作的数据中间状态对其他事务不可见的。因为这些中间状态，是一个过渡状态，与事务的开始状态和事务的结束状态是不一致的。
+   　　举个粒子，张三给李四转账100元。事务要做的是从张三账户上减掉100元，李四账户上加上100元。一致性的含义是其他事务要么看到张三还没有给李四转账的状态，要么张三已经成功转账给李四的状态，而对于张三少了100元，李四还没加上100元这个中间状态是不可见的。
+   　　那么反驳的声音来了：
+   　　要么转账操作全部成功，要么全部失败，这是原子性。从例子上看全部成功，那么一致性就是原子性的一部分咯，为什么还要单独说一致性和原子性？
+   　　你说的不对。在未提交读的隔离级别下是事务内部操作是可见的，明显违背了一致性，怎么解释？
+   　　好吧，需要注意的是：
+   原子性和一致性的的侧重点不同：**原子性关注状态，要么全部成功，要么全部失败，不存在部分成功的状态。**而**一致性关注数据的可见性，中间状态的数据对外部不可见，只有最初状态和最终状态的数据对外可见**
+
+   　　隔离性是多个事物的时候, 相互不能干扰，一致性是要保证操作前和操作后数据或者数据结构的一致性，而我提到的事务的一致性是**关注**数据的中间状态，也就是一致性需要监视中间状态的数据，如果有变化，即刻回滚
+
+3. **隔离性（Isolation）：** 并发访问数据库时，一个用户的事务不被其他事务所干扰，各并发事务之间数据库是独立的；一个事务所做的修改在最终提交以前，对其它事务是不可见的。
+
+   锁（共享读锁，排他写锁，mvcc）
+
+4. **持久性（Durability）：** 一个事务被提交之后。它对数据库中数据的改变是持久的，即使数据库发生故障也不应该对其有任何影响。
+
+   
+
+原子性、持久性通过数据库的redo和undo来完成
+
+一致性是最终目的，通过其他三大特性实现
+
+
+
+### 事务的实现
+
+重做日志**（redo）用来实现事务的持久性，有两部分组成，一是内存中的重做日志，一个是硬盘上的重做日志文件**。innodb是支持事务的存储引擎，通过日志先行WAL，来实现数据库的事务的特性，在一个事务提交的时候，**并不是直接对内存的脏数据进行落盘，而是先把重做日志缓冲中的日志写入文件，然后再提交成功。**这样保证了即使在断电的情况下，依然可以依靠redo log进行数据的恢复与重做。只要是提交的事务，在redo中就会有记录，数据库断电后重启，数据库会对提交的事务，但是没有写入硬盘的脏数据，利用redo来进行重做。 还要一个保证事务的是undo，undo有两个作用：1.实现事务的回滚2.实现mvcc的快照读取redo是物理逻辑日志，计算页的物理修改操作.undo是逻辑记录，记录了行的操作内容.**两阶段提交:先写redo -buffer再写binlog 并落盘最后落盘redo.**
 
 
 
@@ -341,44 +480,6 @@ redo存放在重做日志文件中,与redo不同,undo存放在数据库内部的
 
 
 
-
-
-
-
-
-
-
-
-
-### 什么是事务?
-
-**事务是逻辑上的一组操作，要么都执行，要么都不执行。**
-
-事务最经典也经常被拿出来说例子就是转账了。假如小明要给小红转账1000元，这个转账会涉及到两个关键操作就是：将小明的余额减少1000元，将小红的余额增加1000元。万一在这两个操作之间突然出现错误比如银行系统崩溃，导致小明余额减少而小红的余额没有增加，这样就不对了。事务就是保证这两个关键操作要么都成功，要么都要失败。
-
-
-
-### 事务的四大特性(ACID)
-
-[![事务的特性](MarkDown_Sql.assets/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545342542412538422545352538412541312545372538392542392545362538302541372e706e67)](https://camo.githubusercontent.com/a56cfc4add00ae0a268516f154d400fecd22a80b1bde794c8188b1293ee093e7/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545342542412538422545352538412541312545372538392542392545362538302541372e706e67)
-
-1. **原子性（Atomicity）：** 事务是最小的执行单位，不允许分割。事务的原子性确保动作要么全部完成，要么完全不起作用；
-
-2. **一致性（Consistency）：** 数据库事务的一致性是指：保证事务只能把数据库从一个有效（正确）的状态“转移”到另一个有效（正确）的状态。那么，什么是数据库的有效(正确）的状态？
-
-   ​		一致性是指数据处于一种语义上的有意义且正确的状态。一致性是对数据可见性的约束，保证在一个事务中的多次操作的数据中间状态对其他事务不可见的。因为这些中间状态，是一个过渡状态，与事务的开始状态和事务的结束状态是不一致的。
-   　　举个粒子，张三给李四转账100元。事务要做的是从张三账户上减掉100元，李四账户上加上100元。一致性的含义是其他事务要么看到张三还没有给李四转账的状态，要么张三已经成功转账给李四的状态，而对于张三少了100元，李四还没加上100元这个中间状态是不可见的。
-   　　那么反驳的声音来了：
-   　　要么转账操作全部成功，要么全部失败，这是原子性。从例子上看全部成功，那么一致性就是原子性的一部分咯，为什么还要单独说一致性和原子性？
-   　　你说的不对。在未提交读的隔离级别下是事务内部操作是可见的，明显违背了一致性，怎么解释？
-   　　好吧，需要注意的是：
-   原子性和一致性的的侧重点不同：**原子性关注状态，要么全部成功，要么全部失败，不存在部分成功的状态。**而**一致性关注数据的可见性，中间状态的数据对外部不可见，只有最初状态和最终状态的数据对外可见**
-
-   　　隔离性是多个事物的时候, 相互不能干扰，一致性是要保证操作前和操作后数据或者数据结构的一致性，而我提到的事务的一致性是**关注**数据的中间状态，也就是一致性需要监视中间状态的数据，如果有变化，即刻回滚
-
-3. **隔离性（Isolation）：** 并发访问数据库时，一个用户的事务不被其他事务所干扰，各并发事务之间数据库是独立的；一个事务所做的修改在最终提交以前，对其它事务是不可见的。
-
-4. **持久性（Durability）：** 一个事务被提交之后。它对数据库中数据的改变是持久的，即使数据库发生故障也不应该对其有任何影响。
 
 
 
@@ -440,25 +541,25 @@ redo存放在重做日志文件中,与redo不同,undo存放在数据库内部的
 
 **SQL 标准定义了四个隔离级别：**
 
-- **READ-UNCOMMITTED(读取未提交)：** 最低的隔离级别，允许读取尚未提交的数据变更，**可能会导致脏读、幻读或不可重复读**。
+- **READ-UNCOMMITTED(读取未提交)：** 最低的隔离级别，**允许读取尚未提交的数据变更**，**可能会导致脏读、幻读或不可重复读**。
 
   如果一个事务已经开始写数据，则另外一个事务则不允许同时进行写操作，但允许其他事务读此行数据。该隔离级别可以通过“排他写锁”实现。这样就避免了更新丢失，却可能出现脏读。也就是说事务B读取到了事务A未提交的数据。(写不让写)
 
 - **READ-COMMITTED(读取已提交)：** 允许读取并发事务已经提交的数据，**可以阻止脏读，但是幻读或不可重复读仍有可能发生**。
 
-  读取数据的事务允许其他事务继续访问该行数据，但是未提交的写事务将会禁止其他事务访问该行。该隔离级别避免了脏读，但是却可能出现不可重复读。事务A事先读取了数据，事务B紧接了更新了数据，并提交了事务，而事务A再次读取该数据时，数据已经发生了改变。（写不让读）
+  读取数据的事务允许其他事务继续访问该行数据，但是未提交的写事务将会禁止其他事务访问该行。该隔离级别避免了脏读，但是却可能出现不可重复读。**事务A事先读取了数据，事务B紧接了更新了数据，并提交了事务，而事务A再次读取该数据时，数据已经发生了改变。**（写不让读）
 
 - **REPEATABLE-READ(可重复读)：** 对同一字段的多次读取结果都是一致的，除非数据是被本身事务自己所修改，**可以阻止脏读和不可重复读，但幻读仍有可能发生**。
 
   可重复读是指在一个事务内，多次读同一数据。在这个事务还没有结束时，另外一个事务也访问该同一数据。那么，在第一个事务中的两次读数据之间，即使第二个事务对数据进行修改，第一个事务两次读到的的数据是一样的。这样就发生了在一个事务内两次读到的数据是一样的，因此称为是可重复读。读取数据的事务将会禁止写事务（但允许读事务），写事务则禁止任何其他事务。这样避免了不可重复读取和脏读，但是有时可能出现幻象读。（读取数据的事务）这可以通过“共享读锁”和“排他写锁”实现。（读不让写）
+
+  可以加间隙锁解决幻读问题
 
 - **SERIALIZABLE(可串行化)：** 最高的隔离级别，完全服从ACID的隔离级别。所有的事务依次逐个执行，这样事务之间就完全不可能产生干扰，也就是说，**该级别可以防止脏读、不可重复读以及幻读**。
 
   
 
 ![image-20210313144523540](MarkDown_Sql.assets/image-20210313144523540.png)
-
-
 
 
 
@@ -1023,6 +1124,254 @@ Join语句的优化
 
 
 
+#### 覆盖索引
+
+（Covering Index）一说为索引覆盖。
+
+理解方式一：就是select的数据列只用从索引中就能够取得，不必读取数据行，MySQL可以利用索引返回select列表中的字段，而不必根据索引再次读取数据文件，换句话说查询列要被所建的索引覆盖。
+
+理解方式二：索引是高效找到行的一个方法，但是一般数据库也能使用索引找到一个列的数据，因此它不必读取整个行。毕竟索引叶子节点存储了它们索引的数据；当能通过读取索引就可以得到想要的数据，那就不需要读取行了。一个索引包含了（或覆盖了）满足查询结果的数据就叫做覆盖索引。
+
+注意：
+
+如果要使用覆盖索引，一定要注意select列表中只取出需要的列，不可select*，因为
+
+如果将所有字段一起做索引会导致索引文件过大，查询性能下降。
+
+
+**小结**
+
+解决like '%字符串%'时索引不被使用的方法？复合索引，然后覆盖索引。
+
+##### mysql覆盖索引与回表
+
+*select id,name where name='shenjian'*
+
+*select id,name**,sex** where name='shenjian'*
+
+**多查询了一个属性，为何检索过程完全不同？**
+
+**什么是回表查询？**
+
+**什么是索引覆盖？**
+
+**如何实现索引覆盖？**
+
+**哪些场景，可以利用索引覆盖来优化SQL？**
+
+这些，这是今天要分享的内容。
+
+*画外音：本文试验基于MySQL5.6-InnoDB。*
+
+**一、什么是回表查询？**
+
+这先要从InnoDB的索引实现说起，InnoDB有两大类索引：
+
+- 聚集索引(clustered index)
+- 普通索引(secondary index)
+
+**InnoDB聚集索引和普通索引有什么差异？**
+
+InnoDB**聚集索引**的叶子节点存储行记录，因此， InnoDB必须要有，且只有一个聚集索引：
+
+（1）如果表定义了PK，则PK就是聚集索引；
+
+（2）如果表没有定义PK，则第一个not NULL unique列是聚集索引；
+
+（3）否则，InnoDB会创建一个隐藏的row-id作为聚集索引；
+
+*画外音：所以PK查询非常快，直接定位行记录。*
+
+InnoDB**普通索引**的叶子节点存储主键值。
+
+*画外音：注意，不是存储行记录头指针，MyISAM的索引叶子节点存储记录指针。*
+
+举个栗子，不妨设有表：
+
+*t(id PK, name KEY, sex, flag);*
+
+*画外音：id是聚集索引，name是普通索引。*
+
+表中有四条记录：
+
+*1, shenjian, m, A*
+
+*3, zhangsan, m, A*
+
+*5, lisi, m, A*
+
+*9, wangwu, f, B*
+
+![img](MarkDown_Sql.assets/4459024-8636fab05de6780b)
+
+两个B+树索引分别如上图：
+
+（1）id为PK，聚集索引，叶子节点存储行记录；
+
+（2）name为KEY，普通索引，叶子节点存储PK值，即id；
+
+既然从普通索引无法直接定位行记录，那**普通索引的查询过程是怎么样的呢？**
+
+通常情况下，需要扫码两遍索引树。
+
+例如：
+
+```mysql
+select * from t where name='lisi';
+```
+
+**是如何执行的呢？**
+
+![img](MarkDown_Sql.assets/4459024-a75e767d0198a6a4)
+
+如**粉红色**路径，需要扫码两遍索引树：
+
+（1）先通过普通索引定位到主键值id=5；
+
+（2）在通过聚集索引定位到行记录；
+
+这就是所谓的**回表查询**，**先定位主键值，再定位行记录，它的性能较扫一遍索引树更低。**
+
+**二、什么是索引覆盖\**\**(Covering index)\**\**？**
+
+额，楼主并没有在MySQL的官网找到这个概念。
+
+*画外音：治学严谨吧？*
+
+借用一下SQL-Server官网的说法。
+
+![img](https:////upload-images.jianshu.io/upload_images/4459024-52817ffd66156f6a?imageMogr2/auto-orient/strip|imageView2/2/w/671/format/webp)
+
+MySQL官网，类似的说法出现在explain查询计划优化章节，即explain的输出结果Extra字段为Using index时，能够触发索引覆盖。
+
+![img](https:////upload-images.jianshu.io/upload_images/4459024-ba1bf607b5ab0626?imageMogr2/auto-orient/strip|imageView2/2/w/869/format/webp)
+
+不管是SQL-Server官网，还是MySQL官网，都表达了：**只需要在一棵索引树上就能获取SQL所需的所有列数据，无需回表，速度更快**。
+
+**三、如何实现索引覆盖？**
+
+常见的方法是：将被查询的字段，建立到联合索引里去。
+
+仍是《[迅猛定位低效SQL？](https://links.jianshu.com/go?to=http%3A%2F%2Fmp.weixin.qq.com%2Fs%3F__biz%3DMjM5ODYxMDA5OQ%3D%3D%26mid%3D2651962587%26idx%3D1%26sn%3Dd197aea0090ce93b156e0774c6dc3019%26chksm%3Dbd2d09078a5a801138922fb5f2b9bb7fdaace7e594d55f45ce4b3fc25cbb973bbc9b2deb2c31%26scene%3D21%23wechat_redirect)》中的例子：
+
+```mysql
+create table user (
+id int primary key,
+name varchar(20),
+sex varchar(5),
+index(name)
+)engine=innodb;
+```
+
+第一个SQL语句：
+
+![img](https:////upload-images.jianshu.io/upload_images/4459024-9e1c684ef3808d5f?imageMogr2/auto-orient/strip|imageView2/2/w/1080/format/webp)
+
+
+
+*select id,name from user where name='shenjian';*
+
+能够命中name索引，索引叶子节点存储了主键id，通过name的索引树即可获取id和name，无需回表，符合索引覆盖，效率较高。
+
+*画外音，Extra：**Using index**。*
+
+第二个SQL语句：
+
+![img](https:////upload-images.jianshu.io/upload_images/4459024-8dcf28741073e0d0?imageMogr2/auto-orient/strip|imageView2/2/w/1080/format/webp)
+
+```mysql
+select id,name,sex from user where name='shenjian';
+```
+
+能够命中name索引，索引叶子节点存储了主键id，但sex字段必须回表查询才能获取到，不符合索引覆盖，需要再次通过id值扫码聚集索引获取sex字段，效率会降低。
+
+*画外音，Extra：**Using index condition**。*
+
+如果把(name)单列索引升级为联合索引(name, sex)就不同了。
+
+```mysql
+create table user (
+id int primary key,
+name varchar(20),
+sex varchar(5),
+index(name, sex)
+)engine=innodb;
+```
+
+![img](https:////upload-images.jianshu.io/upload_images/4459024-55b74f7a1cdd1249?imageMogr2/auto-orient/strip|imageView2/2/w/1080/format/webp)
+
+可以看到：
+
+```mysql
+select id,name ... where name='shenjian';
+select id,name,sex ... where name='shenjian';
+```
+
+都能够命中索引覆盖，无需回表。
+
+*画外音，Extra：**Using index**。*
+
+**四、哪些场景可以利用索引覆盖来优化SQL？**
+
+**场景1：全表count查询优化**
+
+![img](MarkDown_Sql.assets/4459024-b8363020eca92a88)
+
+原表为：
+
+```mysql
+user(PK id, name, sex)；
+```
+
+直接：
+
+```mysql
+select count(name) from user;
+```
+
+不能利用索引覆盖。
+
+添加索引：
+
+```mysql
+alter table user add key(name);
+```
+
+就能够利用索引覆盖提效。
+
+**场景2：列查询回表优化**
+
+```mysql
+select id,name,sex ... where name='shenjian';
+```
+
+这个例子不再赘述，将单列索引(name)升级为联合索引(name, sex)，即可避免回表。
+
+```mysql
+create table user (
+id int primary key,
+name varchar(20),
+sex varchar(5),
+index(name, sex)
+)engine=innodb;
+```
+
+**场景3：分页查询**
+
+```java
+select id,name,sex ... order by name limit 500,100;
+```
+
+将单列索引(name)升级为联合索引(name, sex)，也可以避免回表。
+
+
+
+
+
+
+
+
+
 #### 索引失效
 
 1.最佳左前缀法则 - 如果索引了多列，要遵守最左前缀法则。指的是查询从索引的最左前列开始并且不跳过复合索引中间列。
@@ -1059,6 +1408,189 @@ VAR 引号不可丢， SQL 优化有诀窍。
 
 
 
+
+
+#### 小表驱动大表
+
+优化原则：小表驱动大表，即**小的数据集驱动大的数据集**(类似于java的外循环次数尽量要比内循环次数小)。
+
+当B表的数据集必须小于A表的数据集时，用in优于exists。
+
+```mysql
+select * from A where id in (select id from B)
+等价于:
+for select id from B
+for select * from A where A.id = B.id
+
+```
+
+
+
+
+
+当B表的数据集必须小于A表的数据集时，用in优于exists。
+
+```mysql
+select * from A where exists (select 1 from B where B.id = A.id)
+等价于：
+for select * from A
+for select * from B where B.id = A.id
+
+```
+
+
+
+**EXISTS关键字**
+
+```mysql
+SELECT ...FROM table WHERE EXISTS (subquery)
+```
+
+该语法可以理解为：将主查询的数据，放到子查询中做条件验证，根据验证结果（TRUE或FALSE）来决定主查询的数据结果是否得以保留。
+
+EXSTS(subquey)只返回TRUE或FALSE，因此子查询中的SELECT * 也可以是 SELECT 1 或select ‘X’，官方说法是实际执行时会忽略SELECT清单，因此没有区别。
+EXISTS子查询的实际执行过程可能经过了优化而不是我们理解上的逐条对比，如果担忧效率问题，可进行实际检验以确定是否有效率问题。
+EXISTS子查询往往也可以用条件表达式，其他子查询或者JOIN来替代，何种最优需要具体问题具体分析
+
+**in和exists用法**
+
+**示例表：**
+
+```mysql
+mysql> select * from tbl_emp;
++----+------+--------+
+| id | NAME | deptId |
++----+------+--------+
+|  1 | z3   |      1 |
+|  2 | z4   |      1 |
+|  3 | z5   |      1 |
+|  4 | w5   |      2 |
+|  5 | w6   |      2 |
+|  6 | s7   |      3 |
+|  7 | s8   |      4 |
+|  8 | s9   |     51 |
++----+------+--------+
+8 rows in set (0.02 sec)
+
+mysql> select * from tbl_dept;
++----+----------+--------+
+| id | deptName | locAdd |
++----+----------+--------+
+|  1 | RD       | 11     |
+|  2 | HR       | 12     |
+|  3 | MK       | 13     |
+|  4 | MIS      | 14     |
+|  5 | FD       | 15     |
++----+----------+--------+
+5 rows in set (0.01 sec)
+
+```
+
+
+
+**用法比较**
+
+```mysql
+mysql> select * from tbl_emp e where e.deptId in (select id from tbl_dept d);
++----+------+--------+
+| id | NAME | deptId |
++----+------+--------+
+|  1 | z3   |      1 |
+|  2 | z4   |      1 |
+|  3 | z5   |      1 |
+|  4 | w5   |      2 |
+|  5 | w6   |      2 |
+|  6 | s7   |      3 |
+|  7 | s8   |      4 |
++----+------+--------+
+7 rows in set (0.00 sec)
+
+mysql> select * from tbl_emp e where exists (select 1 from tbl_dept d where d.id = e.deptId);
++----+------+--------+
+| id | NAME | deptId |
++----+------+--------+
+|  1 | z3   |      1 |
+|  2 | z4   |      1 |
+|  3 | z5   |      1 |
+|  4 | w5   |      2 |
+|  5 | w6   |      2 |
+|  6 | s7   |      3 |
+|  7 | s8   |      4 |
++----+------+--------+
+7 rows in set (0.00 sec)
+
+mysql> select * from tbl_emp e where exists (select 'X' from tbl_dept d where d.id = e.deptId);
++----+------+--------+
+| id | NAME | deptId |
++----+------+--------+
+|  1 | z3   |      1 |
+|  2 | z4   |      1 |
+|  3 | z5   |      1 |
+|  4 | w5   |      2 |
+|  5 | w6   |      2 |
+|  6 | s7   |      3 |
+|  7 | s8   |      4 |
++----+------+--------+
+7 rows in set (0.00 sec)
+
+```
+
+
+
+
+
+#### 为排序OrderBy使用索引优化
+
+为排序使用索引
+
+MySql两种排序方式∶文件排序 或 扫描有序索引排序
+MySql能为 排序 与 查询 使用相同的索引
+创建复合索引 a_b_c (a, b, c)
+
+order by能使用索引最左前缀
+
+ORDER BY a
+ORDER BY a, b
+ORDER BY a, b, c
+ORDER BY a DESC, b DESC, c DESC
+如果WHERE使用素引的最左前缀定义为常量，则order by能使用索引
+
+WHERE a = const ORDER BY b,c
+WHERE a = const AND b = const ORDER BY c
+WHERE a = const ORDER BY b, c
+WHERE a = const AND b > const ORDER BY b, c
+不能使用索引进行排序
+
+ORDER BY a ASC, b DESC, c DESC //排序不—致
+WHERE g = const ORDER BY b, c //产丢失a索引
+WHERE a = const ORDER BY c //产丢失b索引
+WHERE a = const ORDER BY a, d //d不是素引的一部分
+WHERE a in (…) ORDER BY b, c //对于排序来说,多个相等条件也是范围查询
+
+
+
+#### GroupBy优化与慢查询日志
+
+GroupBy优化
+
+group by实质是先排序后进行分组，遵照索引建的最佳左前缀。
+当无法使用索引列，增大max_length_for_sort_data参数的设置 + 增大sort_buffer_size参数的设置。
+where高于having，能写在where限定的条件就不要去having限定了
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #### 通常SQL调优过程：
 
 观察，至少跑1天，看看生产的慢SQL情况。
@@ -1067,7 +1599,7 @@ explain + 慢SQL分析。
 show profile。
 运维经理 or DBA，进行SQL数据库服务器的参数调优。
 
-##### 总结：
+##### 总结
 
 慢查询日志的开启，设置阙值并捕获
 explain + 慢SQL分析
@@ -1123,33 +1655,113 @@ mysql> SHOW VARIABLES LIKE '%slow_query_log%';
 
 
 
+##### 用Show Profile进行sql分析
+
+默认情况下，参数处于关闭状态，并保存最近15次的运行结果。
 
 
 
+###### 是否支持，看看当前的mysql版本是否支持
+
+```mysql
+mysql> show variables like 'profiling';
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| profiling     | OFF   |
++---------------+-------+
+1 row in set, 1 warning (0.00 sec)
+
+```
 
 
 
+###### 开启功能，默认是关闭，使用前需要开启。
+
+```mysql
+mysql> set profiling=on;
+Query OK, 0 rows affected, 1 warning (0.00 sec)
+
+mysql> show variables like 'profiling';
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| profiling     | ON    |
++---------------+-------+
+1 row in set, 1 warning (0.00 sec)
+
+```
 
 
 
+###### 查看结果，`show profiles;`
+
+```mysql
+mysql> show profiles;
++----------+------------+-----------------------------------------------+
+| Query_ID | Duration   | Query                                         |
++----------+------------+-----------------------------------------------+
+|        1 | 0.00204000 | show variables like 'profiling'               |
+|        2 | 0.55134250 | select * from emp group by id%10 limit 150000 |
+|        3 | 0.56902000 | select * from emp group by id%20 order by 5   |
++----------+------------+-----------------------------------------------+
+3 rows in set, 1 warning (0.00 sec)
+
+```
 
 
 
+###### 诊断SQL，`show profile cpu,block io for query 上一步前面的问题SQL数字号码;`
+
+```mysql
+mysql> show profile cpu,block io for query 3;
++----------------------+----------+----------+------------+--------------+---------------+
+| Status               | Duration | CPU_user | CPU_system | Block_ops_in | Block_ops_out |
++----------------------+----------+----------+------------+--------------+---------------+
+| starting             | 0.000049 | 0.000000 |   0.000000 |         NULL |          NULL |
+| checking permissions | 0.000005 | 0.000000 |   0.000000 |         NULL |          NULL |
+| Opening tables       | 0.000012 | 0.000000 |   0.000000 |         NULL |          NULL |
+| init                 | 0.000021 | 0.000000 |   0.000000 |         NULL |          NULL |
+| System lock          | 0.000009 | 0.000000 |   0.000000 |         NULL |          NULL |
+| optimizing           | 0.000003 | 0.000000 |   0.000000 |         NULL |          NULL |
+| statistics           | 0.000017 | 0.000000 |   0.000000 |         NULL |          NULL |
+| preparing            | 0.000008 | 0.000000 |   0.000000 |         NULL |          NULL |
+| Creating tmp table   | 0.000045 | 0.000000 |   0.000000 |         NULL |          NULL |
+| Sorting result       | 0.000004 | 0.000000 |   0.000000 |         NULL |          NULL |
+| executing            | 0.000002 | 0.000000 |   0.000000 |         NULL |          NULL |
+| Sending data         | 0.568704 | 0.546875 |   0.046875 |         NULL |          NULL |
+| Creating sort index  | 0.000048 | 0.000000 |   0.000000 |         NULL |          NULL |
+| end                  | 0.000003 | 0.000000 |   0.000000 |         NULL |          NULL |
+| query end            | 0.000005 | 0.000000 |   0.000000 |         NULL |          NULL |
+| removing tmp table   | 0.000006 | 0.000000 |   0.000000 |         NULL |          NULL |
+| query end            | 0.000003 | 0.000000 |   0.000000 |         NULL |          NULL |
+| closing tables       | 0.000004 | 0.000000 |   0.000000 |         NULL |          NULL |
+| freeing items        | 0.000061 | 0.000000 |   0.000000 |         NULL |          NULL |
+| cleaning up          | 0.000015 | 0.000000 |   0.000000 |         NULL |          NULL |
++----------------------+----------+----------+------------+--------------+---------------+
+20 rows in set, 1 warning (0.00 sec)
+
+```
 
 
 
+参数备注
 
+ALL：显示所有的开销信息。
+BLOCK IO：显示块lO相关开销。
+CONTEXT SWITCHES ：上下文切换相关开销。
+CPU：显示CPU相关开销信息。
+IPC：显示发送和接收相关开销信息。
+MEMORY：显示内存相关开销信息。
+PAGE FAULTS：显示页面错误相关开销信息。
+SOURCE：显示和Source_function，Source_file，Source_line相关的开销信息。
+SWAPS：显示交换次数相关开销的信息。
+6.日常开发需要注意的结论
 
-
-
-
-
-
-
-
-
-
-
+converting HEAP to MyISAM 查询结果太大，内存都不够用了往磁盘上搬了。
+Creating tmp table 创建临时表，拷贝数据到临时表，用完再删除
+Copying to tmp table on disk 把内存中临时表复制到磁盘，危险!
+locked
 
 
 
@@ -1363,337 +1975,252 @@ InnoDB
 
 ![图片](MarkDown_Sql.assets/640)
 
-### **联合索引最左匹配**
 
-前面我们说的都是针对单列创建的索引，但有的时候我们的多条件查询的时候，也会建立联合索引。单列索引可以看成是特殊的联合索引。
 
-比如我们在 user 表上面，给 name 和 phone 建立了一个联合索引。
 
-```
-ALTER TABLE user_innodb DROP INDEX comidx_name_phone;
-ALTER TABLE user_innodb add INDEX comidx_name_phone (name,phone);
-```
 
-![图片](MarkDown_Sql.assets/640)
 
-联合索引在 B+Tree 中是复合的数据结构，它是按照从左到右的顺序来建立搜索树的（name 在左边，phone 在右边）。
 
-从这张图可以看出来，name 是有序的，phone 是无序的。当 name 相等的时候，phone 才是有序的。
 
-这个时候我们使用 where name='青山' and phone = '136xx '去查询数据的时候，B+Tree 会优先比较 name 来确定下一步应该搜索的方向，往左还是往右。如果 name相同的时候再比较 phone。
 
-但是如果查询条件没有 name，就不知道第一步应该查哪个节点，因为建立搜索树的时候 name 是第一个比较因子，所以用不到索引。
 
-**什么时候用到联合索引**
 
-所以，我们在建立联合索引的时候，一定要把最常用的列放在最左边。
 
-> 比如下面的三条语句，能用到联合索引吗？
 
-1）使用两个字段，可以用到联合索引：
 
-```
-EXPLAIN SELECT * FROM user_innodb WHERE name= '权亮' AND phone = '15204661800';
-```
 
-![图片](MarkDown_Sql.assets/640)
 
-2）使用左边的 name 字段，可以用到联合索引：
 
-```
-EXPLAIN SELECT * FROM user_innodb WHERE name= '权亮'
-```
 
-![图片](MarkDown_Sql.assets/640)
 
-3）使用右边的 phone 字段，无法使用索引，全表扫描：
 
-```
-EXPLAIN SELECT * FROM user_innodb WHERE phone = '15204661800'
-```
 
-![图片](MarkDown_Sql.assets/640)
+### Mysql的锁机制
 
-**如何创建联合索引**
+**面试官：** 哦？性能越来越差？为什么会性能越来越差？你能说一说原因吗？
 
-有一天我们的 DBA 找到我，说我们的项目里面有两个查询很慢。
+哎呀，我这嘴，少说一句会死啊，这下好了，这个得说底层实现原理了，从原来的假装若有所思，变成了真正得若有所思。
 
-```
-SELECT * FROM user_innodb WHERE name= ? AND phone = ?;
-SELECT * FROM user_innodb WHERE name= ?;
-```
+**我：** 这个得从Mysq的锁说起，在Mysql中的锁可以分为分**享锁/读锁（Shared Locks）**、**排他锁/写锁（Exclusive Locks）** 、**间隙锁**、**行锁（Record Locks）**、**表锁**。
 
-按照我们的想法，一个查询创建一个索引，所以我们针对这两条 SQL 创建了两个索引，这种做法觉得正确吗？
+**我：** 在四个隔离级别中加锁肯定是要消耗性能的，而读未提交是没有加任何锁的，所以对于它来说也就是没有隔离的效果，所以它的性能也是最好的。
 
-```
-CREATE INDEX idx_name on user_innodb(name);
-CREATE INDEX idx_name_phone on user_innodb(name,phone);
-```
+**我：** 对于串行化加的是一把大锁，读的时候加共享锁，不能写，写的时候，加的是排它锁，阻塞其它事务的写入和读取，若是其它的事务长时间不能写入就会直接报超时，所以它的性能也是最差的，对于它来就没有什么并发性可言。
 
-当我们创建一个联合索引的时候，按照最左匹配原则，用左边的字段 name 去查询的时候，也能用到索引，所以第一个索引完全没必要。
+**我：** 对于读提交和可重复读，他们俩的实现是兼顾解决数据问题，然后又要有一定的并发行，所以在实现上锁机制会比串行化优化很多，提高并发性，所以性能也会比较好。
 
-相当于建立了两个联合索引(name),(name,phone)。
 
-如果我们创建三个字段的索引 index(a,b,c)，相当于创建三个索引：
 
-**index(a)**
+#### 间隙锁
 
-**index(a,b)**
+1. 记录锁、间隙锁、临键锁，都属于排它锁；
+2. 记录锁就是锁住一行记录；
+3. 间隙锁只有在事务隔离级别 RR 中才会产生；
+4. 唯一索引只有锁住多条记录或者一条不存在的记录的时候，才会产生间隙锁，指定给某条存在的记录加锁的时候，只会加记录锁，不会产生间隙锁；
+5. 普通索引不管是锁住单条，还是多条记录，都会产生间隙锁；
+6. 间隙锁会封锁该条记录相邻两个键之间的空白区域，防止其它事务在这个区域内插入、修改、删除数据，这是为了防止出现 幻读 现象；
+7. 普通索引的间隙，优先以普通索引排序，然后再根据主键索引排序（多普通索引情况还未研究）；
+8. 事务级别是RC（读已提交）级别的话，间隙锁将会失效。
 
-**index(a,b,c)**
 
-用 where b=? 和 where b=? and c=? 和 where a=? and c=?是不能使用到索引的。不能不用第一个字段，不能中断。
 
-这里就是 MySQL 联合索引的**最左匹配原则**。
 
-**5.1. 索引的创建**
 
-1、在用于 where 判断 order 排序和 join 的（on）字段上创建索引
 
-2、索引的个数不要过多。
 
-——浪费空间，更新变慢。
+### MVCC
 
-3、区分度低的字段，例如性别，不要建索引。
+官方一点的解释：**并发访问(读或写)数据库时，对正在事务内处理的数据做 多版本的管理。以达到用来避免写操作的堵塞，从而引发读操作的并发问题。**
 
-——离散度太低，导致扫描行数过多。
+阿里数据库内核2017/12月报
 
-4、频繁更新的值，不要作为主键或者索引。
+> 多版本控制: 指的是一种提高并发的技术。最早的数据库系统，只有读读之间可以并发，读写，写读，写写都要阻塞。引入多版本之后，**只有写写之间相互阻塞，其他三种操作都可以并行**，这样大幅度提高了InnoDB的并发度。在内部实现中，与Postgres在数据行上实现多版本不同，InnoDB是在undolog中实现的，通过undolog可以找回数据的历史版本。找回的数据历史版本可以提供给用户读(按照隔离级别的定义，有些读请求只能看到比较老的数据版本)，也可以在回滚的时候覆盖数据页上的数据。在InnoDB内部中，会记录一个全局的活跃读写事务数组，其主要用来判断事务的可见性。
+> MVCC是一种多版本并发控制机制。
 
-——页分裂
+数据库默认隔离级别：RR（Repeatable Read，可重复读），MVCC主要适用于Mysql的**RC,RR**隔离级别
 
-如果数据不是连续的，往已经写满的页中插入数据，会导致叶页面分裂：
+MVCC的实现，通过**保存数据在某个时间点的快照来实现**的。这意味着一个事务无论运行多长时间，在同一个事务里能够看到数据**一致的视图**。根据事务开始的时间不同，同时也意味着在同一个时刻不同事务看到的相同表里的数据可能是不同的。
 
-![图片](MarkDown_Sql.assets/640)
+每行数据都存在一个版本，每次数据更新时都更新该版本。**修改时Copy出当前版本随意修改**，各个事务之间无干扰。**保存时比较版本号，如果成功（commit），则覆盖原记录；失败则放弃copy（rollback）**
 
-![图片](MarkDown_Sql.assets/640)
 
-5、组合索引把散列性高（区分度高）的值放在前面。
 
-6、创建复合索引，而不是修改单列索引。
+#### MVCC简介
 
+https://blog.csdn.net/whoamiyang/article/details/51901888
 
+#### 1.1 什么是MVCC
 
+MVCC是一种多版本并发控制机制。
 
+#### 1.2 MVCC是为了解决什么问题?
 
-### mysql覆盖索引与回表
+大多数的MYSQL事务型存储引擎,如,InnoDB，Falcon以及PBXT都不使用一种简单的行锁机制.事实上,他们都和MVCC–多版本并发控制来一起使用.
+大家都应该知道,锁机制可以控制并发操作,但是其系统开销较大,而MVCC可以在大多数情况下代替行级锁,使用MVCC,能降低其系统开销.
 
-*select id,name where name='shenjian'*
+#### 1.3 MVCC实现
 
-*select id,name**,sex** where name='shenjian'*
+MVCC是通过保存数据在某个时间点的快照来实现的. 不同存储引擎的MVCC. 不同存储引擎的MVCC实现是不同的,典型的有乐观并发控制和悲观并发控制.
 
-**多查询了一个属性，为何检索过程完全不同？**
 
-**什么是回表查询？**
 
-**什么是索引覆盖？**
+#### 2.MVCC 具体实现分析
 
-**如何实现索引覆盖？**
+下面,我们通过InnoDB的MVCC实现来分析MVCC使怎样进行并发控制的.
+InnoDB的MVCC,是通过在每行记录后面保存两个隐藏的列来实现的,这两个列，分别保存了这个行的创建时间，一个保存的是行的删除时间。这里存储的并不是实际的时间值,而是系统版本号(可以理解为事务的ID)，没开始一个新的事务，系统版本号就会自动递增，事务开始时刻的系统版本号会作为事务的ID.下面看一下在REPEATABLE READ隔离级别下,MVCC具体是如何操作的.
 
-**哪些场景，可以利用索引覆盖来优化SQL？**
-
-这些，这是今天要分享的内容。
-
-*画外音：本文试验基于MySQL5.6-InnoDB。*
-
-**一、什么是回表查询？**
-
-这先要从InnoDB的索引实现说起，InnoDB有两大类索引：
-
-- 聚集索引(clustered index)
-- 普通索引(secondary index)
-
-**InnoDB聚集索引和普通索引有什么差异？**
-
-InnoDB**聚集索引**的叶子节点存储行记录，因此， InnoDB必须要有，且只有一个聚集索引：
-
-（1）如果表定义了PK，则PK就是聚集索引；
-
-（2）如果表没有定义PK，则第一个not NULL unique列是聚集索引；
-
-（3）否则，InnoDB会创建一个隐藏的row-id作为聚集索引；
-
-*画外音：所以PK查询非常快，直接定位行记录。*
-
-InnoDB**普通索引**的叶子节点存储主键值。
-
-*画外音：注意，不是存储行记录头指针，MyISAM的索引叶子节点存储记录指针。*
-
-举个栗子，不妨设有表：
-
-*t(id PK, name KEY, sex, flag);*
-
-*画外音：id是聚集索引，name是普通索引。*
-
-表中有四条记录：
-
-*1, shenjian, m, A*
-
-*3, zhangsan, m, A*
-
-*5, lisi, m, A*
-
-*9, wangwu, f, B*
-
-![img](MarkDown_Sql.assets/4459024-8636fab05de6780b)
-
-两个B+树索引分别如上图：
-
-（1）id为PK，聚集索引，叶子节点存储行记录；
-
-（2）name为KEY，普通索引，叶子节点存储PK值，即id；
-
-既然从普通索引无法直接定位行记录，那**普通索引的查询过程是怎么样的呢？**
-
-通常情况下，需要扫码两遍索引树。
-
-例如：
+2.1简单的小例子
 
 ```mysql
-select * from t where name='lisi';
+create table yang(
+id int primary key auto_increment,
+name varchar(20));
 ```
 
-**是如何执行的呢？**
+假设系统的版本号从1开始.
 
-![img](MarkDown_Sql.assets/4459024-a75e767d0198a6a4)
-
-如**粉红色**路径，需要扫码两遍索引树：
-
-（1）先通过普通索引定位到主键值id=5；
-
-（2）在通过聚集索引定位到行记录；
-
-这就是所谓的**回表查询**，先定位主键值，再定位行记录，它的性能较扫一遍索引树更低。
-
-**二、什么是索引覆盖\**\**(Covering index)\**\**？**
-
-额，楼主并没有在MySQL的官网找到这个概念。
-
-*画外音：治学严谨吧？*
-
-借用一下SQL-Server官网的说法。
-
-![img](https:////upload-images.jianshu.io/upload_images/4459024-52817ffd66156f6a?imageMogr2/auto-orient/strip|imageView2/2/w/671/format/webp)
-
-MySQL官网，类似的说法出现在explain查询计划优化章节，即explain的输出结果Extra字段为Using index时，能够触发索引覆盖。
-
-![img](https:////upload-images.jianshu.io/upload_images/4459024-ba1bf607b5ab0626?imageMogr2/auto-orient/strip|imageView2/2/w/869/format/webp)
-
-不管是SQL-Server官网，还是MySQL官网，都表达了：只需要在一棵索引树上就能获取SQL所需的所有列数据，无需回表，速度更快。
-
-**三、如何实现索引覆盖？**
-
-常见的方法是：将被查询的字段，建立到联合索引里去。
-
-仍是《[迅猛定位低效SQL？](https://links.jianshu.com/go?to=http%3A%2F%2Fmp.weixin.qq.com%2Fs%3F__biz%3DMjM5ODYxMDA5OQ%3D%3D%26mid%3D2651962587%26idx%3D1%26sn%3Dd197aea0090ce93b156e0774c6dc3019%26chksm%3Dbd2d09078a5a801138922fb5f2b9bb7fdaace7e594d55f45ce4b3fc25cbb973bbc9b2deb2c31%26scene%3D21%23wechat_redirect)》中的例子：
+INSERT
+InnoDB为新插入的每一行保存当前系统版本号作为版本号.
+第一个事务ID为1；
 
 ```mysql
-create table user (
-id int primary key,
-name varchar(20),
-sex varchar(5),
-index(name)
-)engine=innodb;
+start transaction;
+insert into yang values(NULL,'yang') ;
+insert into yang values(NULL,'long');
+insert into yang values(NULL,'fei');
+commit;
 ```
 
-第一个SQL语句：
 
-![img](https:////upload-images.jianshu.io/upload_images/4459024-9e1c684ef3808d5f?imageMogr2/auto-orient/strip|imageView2/2/w/1080/format/webp)
+对应在数据中的表如下(后面两列是隐藏列,我们通过查询语句并看不到)
 
+id	name	创建时间(事务ID)	删除时间(事务ID)
+1	yang		1								undefined
+2	long		1								undefined
+3	fei			1								undefined
 
+SELECT
+InnoDB会根据以下两个条件检查每行记录:
+a.InnoDB只会查找版本早于当前事务版本的数据行(也就是,行的系统版本号小于或等于事务的系统版本号)，这样可以确保事务读取的行，要么是在事务开始前已经存在的，要么是事务自身插入或者修改过的.
+b.行的删除版本要么未定义,要么大于当前事务版本号,这可以确保事务读取到的行，在事务开始之前未被删除.
+只有a,b同时满足的记录，才能返回作为查询结果.
 
-*select id,name from user where name='shenjian';*
-
-能够命中name索引，索引叶子节点存储了主键id，通过name的索引树即可获取id和name，无需回表，符合索引覆盖，效率较高。
-
-*画外音，Extra：**Using index**。*
-
-第二个SQL语句：
-
-![img](https:////upload-images.jianshu.io/upload_images/4459024-8dcf28741073e0d0?imageMogr2/auto-orient/strip|imageView2/2/w/1080/format/webp)
+DELETE
+InnoDB会为删除的每一行保存当前系统的版本号(事务的ID)作为删除标识.
+看下面的具体例子分析:
+第二个事务,ID为2;
 
 ```mysql
-select id,name,sex from user where name='shenjian';
+start transaction;
+select * from yang;  //(1)
+select * from yang;  //(2)
+commit; 
 ```
 
-能够命中name索引，索引叶子节点存储了主键id，但sex字段必须回表查询才能获取到，不符合索引覆盖，需要再次通过id值扫码聚集索引获取sex字段，效率会降低。
-
-*画外音，Extra：**Using index condition**。*
-
-如果把(name)单列索引升级为联合索引(name, sex)就不同了。
+假设1
+假设在执行这个事务ID为2的过程中,刚执行到(1),这时,有另一个事务ID为3往这个表里插入了一条数据;
+第三个事务ID为3;
 
 ```mysql
-create table user (
-id int primary key,
-name varchar(20),
-sex varchar(5),
-index(name, sex)
-)engine=innodb;
+start transaction;
+insert into yang values(NULL,'tian');
+commit;
 ```
 
-![img](https:////upload-images.jianshu.io/upload_images/4459024-55b74f7a1cdd1249?imageMogr2/auto-orient/strip|imageView2/2/w/1080/format/webp)
 
-可以看到：
+这时表中的数据如下:
+
+id	name	创建时间(事务ID)	删除时间(事务ID)
+1	yang		1							undefined
+2	long		1							undefined
+3	fei			1							undefined
+4	tian		3								undefined
+然后接着执行事务2中的(2),由于id=4的数据的创建时间(事务ID为3),执行当前事务的ID为2,而InnoDB只会查找事务ID小于等于当前事务ID的数据行,所以id=4的数据行并不会在执行事务2中的(2)被检索出来,在事务2中的两条select 语句检索出来的数据都只会下表:
+
+id	name	创建时间(事务ID)	删除时间(事务ID)
+1	yang			1								undefined
+2	long			1								undefined
+3	fei				1								undefined
+假设2
+假设在执行这个事务ID为2的过程中,刚执行到(1),假设事务执行完事务3后，接着又执行了事务4;
+第四个事务:
 
 ```mysql
-select id,name ... where name='shenjian';
-select id,name,sex ... where name='shenjian';
+start   transaction;  
+delete from yang where id=1;
+commit;  
 ```
 
-都能够命中索引覆盖，无需回表。
 
-*画外音，Extra：**Using index**。*
+此时数据库中的表如下:
 
-**四、哪些场景可以利用索引覆盖来优化SQL？**
+此时数据库中的表如下:
 
-**场景1：全表count查询优化**
+id	name	创建时间(事务ID)	删除时间(事务ID)
+1	yang			1								4
+2	long			1					undefined
+3	fei			1						undefined
+4	tian			3						undefined
+接着执行事务ID为2的事务(2),根据SELECT 检索条件可以知道,它会检索创建时间(创建事务的ID)小于当前事务ID的行和删除时间(删除事务的ID)大于当前事务的行,而id=4的行上面已经说过,而id=1的行由于删除时间(删除事务的ID)大于当前事务的ID,所以事务2的(2)select * from yang也会把id=1的数据检索出来.所以,事务2中的两条select 语句检索出来的数据都如下:
 
-![img](MarkDown_Sql.assets/4459024-b8363020eca92a88)
+id	name	创建时间(事务ID)	删除时间(事务ID)
+1	yang				1							4
+2	long				1					undefined
+3	fei					1					undefined
+UPDATE
+InnoDB执行UPDATE，实际上是新插入了一行记录，并保存其创建时间为当前事务的ID，同时保存当前事务ID到要UPDATE的行的删除时间.
 
-原表为：
+假设3
+假设在执行完事务2的(1)后又执行,其它用户执行了事务3,4,这时，又有一个用户对这张表执行了UPDATE操作:
+第5个事务:
 
 ```mysql
-user(PK id, name, sex)；
+start  transaction;
+update yang set name='Long' where id=2;
+commit;
 ```
 
-直接：
 
-```mysql
-select count(name) from user;
-```
+根据update的更新原则:会生成新的一行,并在原来要修改的列的删除时间列上添加本事务ID,得到表如下:
 
-不能利用索引覆盖。
+id	name	创建时间(事务ID)	删除时间(事务ID)
+1	yang		1								4
+2	long		1									5
+3	fei			1						undefined
+4	tian		3							undefined
+2	Long		5							undefined
+继续执行事务2的(2),根据select 语句的检索条件,得到下表:
 
-添加索引：
+id	name	创建时间(事务ID)	删除时间(事务ID)
+1	yang			1									4
+2	long			1										5
+3	fei				1								undefined
+还是和事务2中(1)select 得到相同的结果.
 
-```mysql
-alter table user add key(name);
-```
 
-就能够利用索引覆盖提效。
 
-**场景2：列查询回表优化**
 
-```mysql
-select id,name,sex ... where name='shenjian';
-```
 
-这个例子不再赘述，将单列索引(name)升级为联合索引(name, sex)，即可避免回表。
 
-```mysql
-create table user (
-id int primary key,
-name varchar(20),
-sex varchar(5),
-index(name, sex)
-)engine=innodb;
-```
 
-**场景3：分页查询**
+### **面试官： 你在上面提到MVCC（多版本并发控制），你能说一说原理吗？**
 
-```java
-select id,name,sex ... order by name limit 500,100;
-```
+**我：** 在实现MVCC时用到了一致性视图，用于支持读提交和可重复读的实现。
 
-将单列索引(name)升级为联合索引(name, sex)，也可以避免回表。
+**我：** 在实现可重复读的隔离级别，只需要在事务开始的时候创建一致性视图，也叫做快照，之后的查询里都共用这个一致性视图，后续的事务对数据的更改是对当前事务是不可见的，这样就实现了可重复读。
 
+**我：** 而读提交，每一个语句执行前都会重新计算出一个新的视图，这个也是可重复读和读提交在MVCC实现层面上的区别。
+
+
+
+![img](MarkDown_Sql.assets/20190828161339866.png)
+
+
+
+
+
+MySQL的MVCC机制
+MVCC是一种多版本并发控制机制，意思是不加锁，维持一个数据的多个版本，使读写操作没有冲突，是MySQL的InnoDB存储引擎实现隔离级别的一种具体方式，用于实现提交读和可重复读这两种隔离级别。MVCC在每行记录后面保存两个隐藏的列，分别保存这个行的创建版本号和删除版本号，（只会查找版本早于当前事务版本的数据行）然后Innodb的MVCC将数据在某个时间点的快照存储在Undo日志中，该日志通过回滚指针指向修改前的最后一个历史版本。当事务进行回滚时，可以用undo log的数据进行恢复。
+解决以下问题：
+在并发读写数据库时，通过不加锁的方式，使得在读操作时不会阻塞写操作，写操作时不会阻塞读操作，提高数据库的并发读写性能；
+实现Innodb的读提交和可重复读的隔离级别。
