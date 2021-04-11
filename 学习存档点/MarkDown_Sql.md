@@ -14,7 +14,7 @@
 
 **2.优点**
 
-（1）.容易理解，二维表的结构非常贴近现实世界，二维表格，容易理解。
+（1）容易理解，二维表的结构非常贴近现实世界，二维表格，容易理解。
 
 （2）使用方便，通用的sql语句使得操作关系型数据库非常方便。
 
@@ -466,7 +466,13 @@ redo存放在重做日志文件中,与redo不同,undo存放在数据库内部的
 
 
 
-### 索引
+
+
+
+
+### 索引优化
+
+#### 前言
 
 在之前，我对索引有以下的认知：
 
@@ -485,7 +491,7 @@ redo存放在重做日志文件中,与redo不同,undo存放在数据库内部的
 - Hash索引和B+树索引有什么区别？主流的使用哪一个比较多？InnoDB存储都支持吗？
 - 聚集索引和非聚集索引有什么区别？
 
-#### 1.1聊聊索引的基础知识
+##### 1.1聊聊索引的基础知识
 
 首先Mysql的基本存储结构是**页**(记录都存在页里边)：
 
@@ -507,7 +513,7 @@ redo存放在重做日志文件中,与redo不同,undo存放在数据库内部的
 
 很明显，在数据量很大的情况下这样查找会**很慢**！
 
-#### 1.2索引提高检索速度
+##### 1.2索引提高检索速度
 
 索引做了些什么可以让我们查询加快速度呢？
 
@@ -527,6 +533,628 @@ redo存放在重做日志文件中,与redo不同,undo存放在数据库内部的
 
 
 
+
+
+https://blog.csdn.net/u011863024/article/details/115470147
+
+#### SQL性能下降原因
+
+1.查询语句写的烂
+
+2.索引失效
+
+单值
+
+```mysql
+select * from user where name='';
+create index idx_user_name on user(name);
+```
+
+复合
+
+```mysql
+select * from user where name='' and email='';
+create index idx_user_name on user(name, email);
+```
+
+3.关联查询太多join（设计缺陷或不得已的需求）
+
+4.服务器调优及各个参数设置（缓冲、线程数等）
+
+#### SQL执行加载顺序
+
+手写
+
+```mysql
+SELECT DISTINCT
+    <select_list>
+FROM
+    <left_table> <join_type>
+JOIN 
+    <right_table> 
+ON
+    <join_condition>
+WHERE
+    <where_condition>
+GROUP BY
+    <group_by_list>
+HAVING
+    <having_condition>
+ORDER BY
+    <order_by_condition>
+LIMIT
+    <limit_number>
+
+```
+
+
+
+机读
+
+```mysql
+1 FROM <left_table>
+2 ON <join_condition>
+3 <join_type> JOIN <right_table>
+4 WHERE <where_condition>
+5 GROUP BY <group_by_list>
+6 HAVING <having_condition>
+7 SELECT
+8 DISTINCT <select_list>
+9 ORDER BY <order_by_condition>
+10 LIMIT <limit_number>
+
+```
+
+
+
+![img](MarkDown_Sql.assets/300509958f3201f1192342b06c5a552f.png)
+
+
+
+#### 七种JOIN理论
+
+![img](MarkDown_Sql.assets/b83a988a5240818d9beb29bae12d76fb.png)
+
+
+
+MySQL不支持full join，不过可以换种方法表示(图6) (2,3union)
+
+```mysql
+mysql> select * from tbl_emp a left join tbl_dept b on a.deptId = b.id
+    -> union
+    -> select * from tbl_emp a right join tbl_dept b on a.deptId = b.id;
++------+------+--------+------+----------+--------+
+| id   | NAME | deptId | id   | deptName | locAdd |
++------+------+--------+------+----------+--------+
+|    1 | z3   |      1 |    1 | RD       | 11     |
+|    2 | z4   |      1 |    1 | RD       | 11     |
+|    3 | z5   |      1 |    1 | RD       | 11     |
+|    4 | w5   |      2 |    2 | HR       | 12     |
+|    5 | w6   |      2 |    2 | HR       | 12     |
+|    6 | s7   |      3 |    3 | MK       | 13     |
+|    7 | s8   |      4 |    4 | MIS      | 14     |
+|    8 | s9   |     51 | NULL | NULL     | NULL   |
+| NULL | NULL |   NULL |    5 | FD       | 15     |
++------+------+--------+------+----------+--------+
+9 rows in set (0.00 sec)
+
+```
+
+
+
+图7(4,5union)
+
+```mysql
+mysql> select * from tbl_emp a left join tbl_dept b on a.deptId = b.id where b.id is null 
+union 
+select * from tbl_emp a right join tbl_dept b on a.deptId = b.id where a.deptId is null;
++------+------+--------+------+----------+--------+
+| id   | NAME | deptId | id   | deptName | locAdd |
++------+------+--------+------+----------+--------+
+|    8 | s9   |     51 | NULL | NULL     | NULL   |
+| NULL | NULL |   NULL |    5 | FD       | 15     |
++------+------+--------+------+----------+--------+
+2 rows in set (0.00 sec)
+
+```
+
+
+
+#### 索引是什么
+
+MySQL官方对索引的定义为：**索引（Index）是帮助MySQL高效获取数据的数据结构。可以得到索引的本质：索引是数据结构。**
+
+索引的目的在于提高查询效率，可以类比字典。
+
+如果要查“mysql”这个单词，我们肯定需要定位到m字母，然后从下往下找到y字母，再找到剩下的sql。
+
+如果没有索引，那么你可能需要逐个逐个寻找，如果我想找到Java开头的单词呢？或者Oracle开头的单词呢？
+
+是不是觉得如果没有索引，这个事情根本无法完成？
+
+你可以简单理解为**“排好序的快速查找数据结构”。**
+
+索引**两大**作用：**查找和排序**
+
+
+
+#### 索引优劣势
+
+优势
+
+类似大学图书馆建书目索引，**提高数据检索的效率，降低数据库的IO成本**。
+
+通过索引列对数据进行排序，**降低数据排序的成本，降低了CPU的消耗**。
+
+劣势
+
+实际上索引也是一张表，该表保存了主键与索引字段，并指向实体表的记录，所以索引列也是**要占用空间**的（占空间）
+
+虽然索引大大提高了查询速度，同时却会**降低更新表的速度**，如对表进行INSERT、UPDATE和DELETE。因为更新表时，MySQL不仅要保存数据，还要保存一下索引文件每次更新添加了索引列的字段，都会调整因为更新所带来的键值变化后的索引信息。
+
+
+#### 索引分类和建索引命令语句
+
+MySQL索引分类：
+
+- 单值索引：即一个索引只包含单个列，一个表可以有多个单列索引。
+- 唯一索引：索引列的值必须唯一，但允许有空值。
+- 复合索引：即一个索引包含多个列。
+
+
+
+**基本语法**：
+**创建**
+
+```mysql
+CREATE [UNIQUE] INDEX indexName ON mytable(columnName(length));
+ALTER mytable ADD [UNIQUE] INDEX [indexName] ON (columnName(length));
+```
+
+**删除**
+
+```mysql
+DROP INDEX [indexName] ON mytable;
+```
+
+**查看**
+
+```mysql
+SHOW INDEX FROM tableName;
+```
+
+使用alter命令 - **有四种方式来添加数据表的索引**
+
+```mysql
+ALTER TABLE tbl_name ADD PRIMARY KEY (column_list);：该语句添加一个主键，这意味着索引值必须是唯一的，且不能为NULL。
+ALTER TABLE tbl name ADD UNIQUE index_name (column_list);：这条语句创建索引的值必须是唯一的(除了NULL外，NULL可能会出现多次)。
+ALTER TABLE tbl_name ADD INDEX index_name (column_list);：添加普通索引，索引值可出现多次。
+ALTER TABLE tbl_name ADD FULLTEXT index_name (column_list);：该语句指定了索引为FULLTEXT，用于全文索引。
+```
+
+```java
+//TODO
+```
+
+
+
+
+
+#### 哪些情况适合建索引
+
+主键自动建立唯一索引
+频繁作为查询条件的字段应该创建索引
+查询中与其它表关联的字段，外键关系建立索引
+频繁更新的字段不适合创建索引，因为每次更新不单单是更新了记录还会更新索引
+Where条件里用不到的字段不创建索引
+单键/组合索引的选择问题，who?(在高并发下倾向创建组合索引)
+查询中排序的字段，排序字段若通过索引去访问将大大提高排序速度
+查询中统计或者分组字段
+
+#### 哪些情况不适合建索引
+
+表记录太少
+经常增删改的表
+数据重复且分布平均的表字段，因此应该只为最经常查询和最经常排序的数据列建立索引。注意，如果某个数据列包含许多重复的内容，为它建立索引就没有太大的实际效果。
+
+假如一个表有10万行记录，有一个字段A只有T和F两种值，且每个值的分布概率天约为50%，那么对这种表A字段建索引一般不会提高数据库的查询速度。
+
+索引的选择性是指索引列中不同值的数目与表中记录数的比。如果一个表中有2000条记录，表索引列有1980个不同的值，那么这个索引的选择性就是1980/2000=0.99。**一个索引的选择性越接近于1，这个索引的效率就越高**。
+
+
+
+
+**MySQL常见瓶颈**
+
+- CPU：CPU在饱和的时候一般发生在数据装入内存或从磁盘上读取数据时候
+- IO：磁盘I/O瓶颈发生在装入数据远大于内存容量的时候
+- 服务器硬件的性能瓶颈：top，free，iostat和vmstat来查看系统的性能状态
+
+
+
+#### explain使用简介
+
+使用EXPLAIN关键字可以模拟优化器执行SQL查询语句，从而知道MySQL是如何处理你的SQL语句的。分析你的查询语句或是表结构的性能瓶颈。
+
+能干嘛
+
+表的读取顺序
+数据读取操作的操作类型
+哪些索引可以使用
+哪些索引被实际使用
+表之间的引用
+每张表有多少行被优化器查询
+
+- explain + sql语句
+
+执行计划包含的信息
+
+- | id | select_type | table | partitions | type | possible_keys | key | key_len | ref | rows | filtered | Extra |
+
+```mysql
+mysql> select * from tbl_dept;
++----+----------+--------+
+| id | deptName | locAdd |
++----+----------+--------+
+|  1 | RD       | 11     |
+|  2 | HR       | 12     |
+|  3 | MK       | 13     |
+|  4 | MIS      | 14     |
+|  5 | FD       | 15     |
++----+----------+--------+
+5 rows in set (0.00 sec)
+
+mysql> explain select * from tbl_dept;
++----+-------------+----------+------------+------+---------------+------+---------+------+------+----------+-------+
+| id | select_type | table    | partitions | type | possible_keys | key  | key_len | ref  | rows | filtered | Extra |
++----+-------------+----------+------------+------+---------------+------+---------+------+------+----------+-------+
+|  1 | SIMPLE      | tbl_dept | NULL       | ALL  | NULL          | NULL | NULL    | NULL |    5 |   100.00 | NULL  |
++----+-------------+----------+------------+------+---------------+------+---------+------+------+----------+-------+
+1 row in set, 1 warning (0.00 sec)
+
+```
+
+##### explain之id介绍
+
+select查询的序列号，包含一组数字，表示查询中执行select子句或**操作表的顺序**
+
+三种情况：
+
+**id相同，执行顺序由上至下**
+
+id不同，如果是子查询，id的序号会递增，id值越大优先级越高，越先被执行
+
+id相同，执行顺序由上至下
+
+![img](MarkDown_Sql.assets/489a7f6eff3f1bd0b1b72ce7efd3860f.png)
+
+id不同，如果是子查询，id的序号会递增，id值越大优先级越高，越先被执行
+
+![img](MarkDown_Sql.assets/1fbb87af7a3428f3ded4ce9ef927eabf.png)
+
+id如果相同，可以认为是一组，从上往下顺序执行；在所有组中，id值越大，优先级越高，越先执行，衍生=DERIVED
+
+小结
+
+**id越大越先查询**
+
+##### explain之select_type和table介绍
+
+select_type：查询的类型，主要是用于区别普通查询、联合查询、子查询等的复杂查询。
+
+select_type有哪些？
+
+SIMPLE - 简单的select查询,查询中不包含子查询或者UNION。
+PRIMARY - 查询中若包含任何复杂的子部分，最外层查询则被标记为。
+SUBQUERY - 在SELECT或WHERE列表中包含了子查询。
+DERIUED - 在FROM列表中包含的子查询被标记为DERIVED（衍生）MySQL会递归执行这些子查询，把结果放在临时表里。
+UNION - 若第二个SELECT出现在UNION之后，则被标记为UNION；若UNION包含在FROM子句的子查询中外层SELECT将被标记为：DERIVED。
+UNION RESULT - 从UNION表获取结果的SELECT。
+
+table：显示这一行的数据是关于哪张表的。
+
+
+##### explain之type介绍
+
+访问类型排列
+
+type显示的是访问类型，是较为重要的一个指标，结果值从最好到最坏依次是：
+
+system > const > eq_ref > ref > fulltext > ref_or_null > index_merge > unique_subquery > index_subquery > range > index >ALL
+
+**system>const>eq_ref>ref>range>index>ALL**
+
+一般来说，得保证查询至少达到range级别，最好能达到ref。
+
+详细说明
+
+system：表只有一行记录（等于系统表），这是const类型的特列，平时不会出现，这个也可以忽略不计。
+
+const：表示通过索引一次就找到了，const用于比较primary key或者unique索引。因为只匹配一行数据，所以很快如将主键置于where列表中，MySQL就能将该查询转换为一个常量。
+
+
+![img](MarkDown_Sql.assets/13e25a155803062c26ec5669e74c5fa4.png)
+
+
+
+eq_ref：唯一性索引扫描，对于每个索引键，表中只有一条记录与之匹配。常见于主键或唯一索引扫描。
+
+![img](MarkDown_Sql.assets/7cff8e85d84605216d677387460f10d7.png)
+
+
+
+ref：非唯一性索引扫描，返回匹配某个单独值的所有行，本质上也是一种索引访问，它返回所有匹配某个单独值的行，然而，它可能会找到多个符合条件的行，所以他应该属于查找和扫描的混合体。
+
+![img](MarkDown_Sql.assets/26633a476411b138886bb94b13fbfb6e.png)
+
+
+
+range：只检索给定范围的行,使用一个索引来选择行。key列显示使用了哪个索引一般就是在你的where语句中出现了between、<、>、in等的查询。这种范围扫描索引扫描比全表扫描要好，因为它只需要开始于索引的某一点，而结束语另一点，不用扫描全部索引。
+
+![img](MarkDown_Sql.assets/2f69477aa5f79e3092352644aba9c3b2.png)
+
+
+
+
+
+index：Full Index Scan，index与ALL区别为index类型只遍历索引树。这通常比ALL快，因为索引文件通常比数据文件小（也就是说虽然all和Index都是读全表，但index是从索引中读取的，而all是从硬盘中读的）。
+
+![img](MarkDown_Sql.assets/1f740bdbde95ce4ee3dbc86499b93f98.png)
+
+
+
+
+
+**all**：Full Table Scan，将遍历全表以找到匹配的行。
+
+![img](MarkDown_Sql.assets/e7a941c6ba4b1f674843a31f5e32c849.png)
+
+
+
+备注：一般来说，得保证查询至少达到range级别，最好能达到ref。
+
+
+
+##### explain之possible_keys和key介绍
+
+**possible_keys**
+
+显示可能应用在这张表中的索引，一个或多个。查询涉及到的字段火若存在索引，则该索引将被列出，但不一定被查询实际使用。
+
+**key**
+
+实际使用的索引。如果为NULL，则没有使用索引
+
+查询中若使用了覆盖索引，则该索引仅出现在key列表中
+![img](MarkDown_Sql.assets/e7a941c6ba4b1f674843a31f5e32c849.png)
+
+
+
+##### explain之key_len介绍
+
+表示索引中使用的字节数，可通过该列计算查询中使用的索引的长度。在不损失精确性的情况下，长度越短越好
+
+key_len显示的值为索引字段的最大可能长度，**并非实际使用长度**，即key_len是根据表定义计算而得，不是通过表内检索出的
+
+![img](MarkDown_Sql.assets/e7a941c6ba4b1f674843a31f5e32c849.png)
+
+
+
+##### explain之ref介绍
+
+显示索引的哪一列被使用了，如果可能的话，是一个常数。哪些列或常量被用于查找索引列上的值。
+
+![img](MarkDown_Sql.assets/c3f5c1c1b1db3f4e2014d9b113466365.png)
+
+由key_len可知t1表的idx_col1_col2被充分使用，col1匹配t2表的col1，col2匹配了一个常量，即 ‘ac’。
+
+查询中与其它表关联的字段，外键关系建立索引
+
+
+
+
+
+##### explain之rows介绍
+
+根据表统计信息及索引选用情况，大致估算出找到所需的记录所需要读取的行数。
+
+![img](MarkDown_Sql.assets/1cc2534c7e7149b22fc67a45a84b5d3c.png)
+
+
+
+
+
+##### explain之Extra介绍
+
+包含不适合在其他列中显示但十分重要的额外信息。
+
+**Using filesort**
+
+说明mysql会对数据使用一个外部的索引排序，而不是按照表内的索引顺序进行读取。**MySQL中无法利用索引完成的排序操作称为"文件排序"**
+
+![img](MarkDown_Sql.assets/348a6753472b993e35ab8e016d6dbc8b.png)
+
+
+
+
+
+**Using temporary**
+
+使了用临时表保存中间结果，MysQL在对查询结果排序时使用临时表。**常见于排序order by和分组查询group by**。
+
+![img](MarkDown_Sql.assets/b2ff96a5474c9ed9dc3866c0077fd50c.png)
+
+
+
+**Using index**
+
+表示相应的select操作中使用了覆盖索引（Covering Index），避免访问了表的数据行，效率不错！
+
+如果同时出现using where，表明索引被用来执行索引键值的查找；
+
+如果没有同时出现using where，表明索引用来读取数据而非执行查找动作。
+![img](MarkDown_Sql.assets/b833dcdeadfd386eeb9347c5f23b1b9a.png)
+
+如果同时**出现using where，表明索引被用来执行索引键值的查找**；
+
+![img](MarkDown_Sql.assets/0d8667b3f990407f9f4ad2c8e4b4f9ea.png)
+
+
+
+
+
+##### 索引两表优化案例
+
+索引两表优化，左连接右表建索引，右连接左表建索引
+
+这是由左连接特性决定的。LEFT JOIN条件用于确定如何从右表搜索行，左边一定都有，所以右边是我们的关键点，一定需要在右表建立索引。
+
+
+
+##### 索引三表优化案例
+
+Join语句的优化
+
+尽可能减少Join语句中的NestedLoop的循环总次数：“永远用小结果集驱动大的结果集”。
+
+优先优化NestedLoop的内层循环，保证Join语句中被驱动表上Join条件字段已经被索引。
+
+当无法保证被驱动表的Join条件字段被索引且内存资源充足的前提下，不要太吝惜JoinBuffer的设置。
+
+
+
+#### 索引失效
+
+1.最佳左前缀法则 - 如果索引了多列，要遵守最左前缀法则。指的是查询从索引的最左前列开始并且不跳过复合索引中间列。
+2.不在索引列上做任何操作（计算、函数、（自动or手动）类型转换），会导致索引失效而转向全表扫描。
+3.存储引擎不能使用索引中范围条件右边的列。
+4.尽量使用覆盖索引（只访问索引的查询（索引列和查询列一致）），减少select *。
+5.mysql在使用不等于（!=或者<>）的时候无法使用索引会导致全表扫描。
+6.i.s null, is not null 也无法使用索引。
+7.like以通配符开头（’%abc…’），mysql索引失效会变成全表扫描的操作。
+8.字符串不加单引号索引失效。
+9.少用or，用它来连接时会索引失效。
+
+![image-20210411180936953](MarkDown_Sql.assets/image-20210411180936953.png)
+
+
+
+![image-20210411181032566](MarkDown_Sql.assets/image-20210411181032566.png)
+
+
+
+#### **优化总结口诀**
+
+全值匹配我最爱， 最左前缀要遵守；
+
+带头大哥不能死， 中间兄弟不能断；
+
+索引列上少计算， 范围之后全失效；
+
+LIKE 百分写最右， 覆盖索引不写 *；
+
+不等空值还有 OR， 索引影响要注意；
+
+VAR 引号不可丢， SQL 优化有诀窍。
+
+
+
+#### 通常SQL调优过程：
+
+观察，至少跑1天，看看生产的慢SQL情况。
+开启慢查询日志，设置阙值，比如超过5秒钟的就是慢SQL，并将它抓取出来。
+explain + 慢SQL分析。
+show profile。
+运维经理 or DBA，进行SQL数据库服务器的参数调优。
+
+##### 总结：
+
+慢查询日志的开启，设置阙值并捕获
+explain + 慢SQL分析
+show profile查询SQL在Mysql服务器里面的执行细节和生命周期情况
+SQL数据库服务器的参数调优。
+
+
+
+##### 慢查询日志
+
+MySQL数据库没有开启慢查询日志，需要我们手动来设置这个参数
+
+###### **查看是否开启及如何开启**
+
+- 默认 - `SHOW VARIABLES LIKE '%slow_query_log%';`
+- 开启 - `set global slow_query_log=1;`，只对当前数据库生效，如果MySQL重启后则会失效。
+
+```mysql
+mysql> SHOW VARIABLES LIKE '%slow_query_log%';
++---------------------+--------------------------+
+| Variable_name       | Value                    |
++---------------------+--------------------------+
+| slow_query_log      | OFF                      |
+| slow_query_log_file | DESKTOP-LNJQ0VF-slow.log |
++---------------------+--------------------------+
+2 rows in set, 1 warning (0.00 sec)
+
+mysql> set global slow_query_log=1;
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> SHOW VARIABLES LIKE '%slow_query_log%';
++---------------------+--------------------------+
+| Variable_name       | Value                    |
++---------------------+--------------------------+
+| slow_query_log      | ON                       |
+| slow_query_log_file | DESKTOP-LNJQ0VF-slow.log |
++---------------------+--------------------------+
+2 rows in set, 1 warning (0.00 sec)
+
+```
+
+
+
+###### **设置慢SQL阈值时间**：
+
+`set global long_query_time=3;`
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ### InnoDB
 
 https://mp.weixin.qq.com/s?__biz=MzI5MzE4MzYxMw==&mid=2247487458&idx=1&sn=0ae7cca5ce826f81d60d85ce74adb2e6&source=41#wechat_redirect
@@ -535,7 +1163,7 @@ https://mp.weixin.qq.com/s?__biz=MzI5MzE4MzYxMw==&mid=2247487458&idx=1&sn=0ae7cc
 
 MySQL 的存储结构分为 5 级：表空间、段、簇、页、行。
 
-![图片](https://mmbiz.qpic.cn/mmbiz_png/4UksEIc42Kf39gjuw9f9WqR4ibBiaQ5SIeI5hFJcxq2ZgBXGWF1cURN4Eic6UxL3aBRSiaDxHZIdjcchIoVFvBAA1w/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+![图片](MarkDown_Sql.assets/640)
 
 
 
@@ -575,7 +1203,7 @@ MySQL 的存储结构分为 5 级：表空间、段、簇、页、行。
 
 操作系统和内存打交道，最小的单位是页 Page。文件系统的内存页通常是 4K。
 
-![图片](https://mmbiz.qpic.cn/mmbiz_png/4UksEIc42Kf39gjuw9f9WqR4ibBiaQ5SIetoKYpopWCwIjtg5F5Vba97EPRib799ndic3wzgyGrZA6YdOQd7lmfNlg/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+![图片](MarkDown_Sql.assets/640)
 
 **行 Row（仅供了解）**
 
@@ -589,7 +1217,7 @@ InnoDB 存储引擎是面向行的（row-oriented），也就是说数据的存�
 
 我们来看一下 InnoDB 里面的 B+树的存储结构：
 
-![图片](https://mmbiz.qpic.cn/mmbiz_png/4UksEIc42Kf39gjuw9f9WqR4ibBiaQ5SIexiagArL3F0TsmOlDicAYTaPfkJBdLCQjCFSJiaEX1ZMGqe2icjWG5AcMOQ/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+![图片](MarkDown_Sql.assets/640)
 
 MySQL 中的 B+Tree 有几个特点：
 
@@ -607,7 +1235,7 @@ MySQL 中的 B+Tree 有几个特点：
 
 树 深 度 为 2 的 时 候 ， 有 1170^2 个 叶 子 节 点 ， 可 以 存 储 的 数 据 为1170*1170*16=21902400。
 
-![图片](https://mmbiz.qpic.cn/mmbiz_png/4UksEIc42Kf39gjuw9f9WqR4ibBiaQ5SIeLM5wW6JRSTC0PCtrDtvLGz6BSqyaqfvNGiaVaVxRFhuricrDOKcQUVLQ/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+![图片](MarkDown_Sql.assets/640)
 
 在查找数据时一次页的查找代表一次 IO，也就是说，一张 2000 万左右的表，查询数据最多需要访问 3 次磁盘。
 
@@ -653,7 +1281,7 @@ MySQL 中的 B+Tree 有几个特点：
 
 插入：60、56、68、45、64、58、72、43、49
 
-![图片](https://mmbiz.qpic.cn/mmbiz_png/4UksEIc42Kf39gjuw9f9WqR4ibBiaQ5SIe2wdicSicQl7tUePx7lkL0OdDbB2rcSkOZjKibnBc1sH2ic89XZgiazia8LIg/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+![图片](MarkDown_Sql.assets/640)
 
 基于以上规则，可以推导出：
 
@@ -715,7 +1343,7 @@ B+Tree叶节点的data域存放的是数据记录的地址。在索引检索的�
 
 MyISAM 的 B+Tree 里面，叶子节点存储的是数据文件对应的磁盘地址。所以从索引文件.MYI 中找到键值后，会到数据文件.MYD 中获取相应的数据记录。
 
-![图片](https://mmbiz.qpic.cn/mmbiz_png/4UksEIc42Kf39gjuw9f9WqR4ibBiaQ5SIekbm7x1iajVQnBdcoteGpptibszSWQMeJEYz36sqkyKDyZlpcBBFBzacQ/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+![图片](MarkDown_Sql.assets/640)
 
 > 这里是主键索引，如果是辅助索引，有什么不一样呢？
 
@@ -723,7 +1351,7 @@ MyISAM 的 B+Tree 里面，叶子节点存储的是数据文件对应的磁盘�
 
 辅助索引跟主键索引存储和检索数据的方式是没有任何区别的，一样是在索引文件里面找到磁盘地址，然后到数据文件里面获取数据。
 
-![图片](https://mmbiz.qpic.cn/mmbiz_png/4UksEIc42Kf39gjuw9f9WqR4ibBiaQ5SIeRbqzVMyIm2yjaOibsjCGibKnJe7ibky4XSBJHtP2aqpmYwBAJojCs6HcQ/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+![图片](MarkDown_Sql.assets/640)
 
 InnoDB
 
@@ -733,7 +1361,7 @@ InnoDB
 
 在 InnoDB 的主键索引的叶子节点上，它直接存储了我们的数据。
 
-![图片](https://mmbiz.qpic.cn/mmbiz_png/4UksEIc42Kf39gjuw9f9WqR4ibBiaQ5SIeb8ic2Vhz1XhVTcVNFtKq8lfRYrFFqMQTMXo8ibF0Hj1zseib3RwXBUydw/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+![图片](MarkDown_Sql.assets/640)
 
 ### **联合索引最左匹配**
 
@@ -746,7 +1374,7 @@ ALTER TABLE user_innodb DROP INDEX comidx_name_phone;
 ALTER TABLE user_innodb add INDEX comidx_name_phone (name,phone);
 ```
 
-![图片](https://mmbiz.qpic.cn/mmbiz_png/4UksEIc42Kf39gjuw9f9WqR4ibBiaQ5SIeBRttXWfPCRMIwXdWgGPllEYhZfOgquRwv2o61XY35xrlV5FVPvYcKg/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+![图片](MarkDown_Sql.assets/640)
 
 联合索引在 B+Tree 中是复合的数据结构，它是按照从左到右的顺序来建立搜索树的（name 在左边，phone 在右边）。
 
@@ -768,7 +1396,7 @@ ALTER TABLE user_innodb add INDEX comidx_name_phone (name,phone);
 EXPLAIN SELECT * FROM user_innodb WHERE name= '权亮' AND phone = '15204661800';
 ```
 
-![图片](https://mmbiz.qpic.cn/mmbiz_png/4UksEIc42Kf39gjuw9f9WqR4ibBiaQ5SIeST0UibH3GUoOd2ibc07FjFEEY7Lm1wkmdbw3MAicoEIj9Upel6QjbXo7g/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+![图片](MarkDown_Sql.assets/640)
 
 2）使用左边的 name 字段，可以用到联合索引：
 
@@ -776,7 +1404,7 @@ EXPLAIN SELECT * FROM user_innodb WHERE name= '权亮' AND phone = '15204661800'
 EXPLAIN SELECT * FROM user_innodb WHERE name= '权亮'
 ```
 
-![图片](https://mmbiz.qpic.cn/mmbiz_png/4UksEIc42Kf39gjuw9f9WqR4ibBiaQ5SIe1tQcgSDKtRksB7e4hXOdurdG5pEpT8p6p1SjiaRMvq0ItXBbBxjicSNQ/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+![图片](MarkDown_Sql.assets/640)
 
 3）使用右边的 phone 字段，无法使用索引，全表扫描：
 
@@ -784,7 +1412,7 @@ EXPLAIN SELECT * FROM user_innodb WHERE name= '权亮'
 EXPLAIN SELECT * FROM user_innodb WHERE phone = '15204661800'
 ```
 
-![图片](https://mmbiz.qpic.cn/mmbiz_png/4UksEIc42Kf39gjuw9f9WqR4ibBiaQ5SIeNicia0qA5OZQFRJLSUF6RT8HmAccyWNCB45h177dBmES4sNY82icClh6w/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+![图片](MarkDown_Sql.assets/640)
 
 **如何创建联合索引**
 
@@ -836,9 +1464,9 @@ CREATE INDEX idx_name_phone on user_innodb(name,phone);
 
 如果数据不是连续的，往已经写满的页中插入数据，会导致叶页面分裂：
 
-![图片](https://mmbiz.qpic.cn/mmbiz_png/4UksEIc42Kf39gjuw9f9WqR4ibBiaQ5SIeXmsnooMghv0Q7sGp37VOBJDC6JQI9gyMabTeXqfvicLIsMz4TBoLEgA/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+![图片](MarkDown_Sql.assets/640)
 
-![图片](https://mmbiz.qpic.cn/mmbiz_png/4UksEIc42Kf39gjuw9f9WqR4ibBiaQ5SIekv3jRmeBiba8qlXGjOPRwRwjlgmBrRib2ZTUHgiaLfxHO4icYkcrSrK5XA/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+![图片](MarkDown_Sql.assets/640)
 
 5、组合索引把散列性高（区分度高）的值放在前面。
 
@@ -907,7 +1535,7 @@ InnoDB**普通索引**的叶子节点存储主键值。
 
 *9, wangwu, f, B*
 
-![img](https://upload-images.jianshu.io/upload_images/4459024-8636fab05de6780b?imageMogr2/auto-orient/strip|imageView2/2/w/359/format/webp)
+![img](MarkDown_Sql.assets/4459024-8636fab05de6780b)
 
 两个B+树索引分别如上图：
 
@@ -927,7 +1555,7 @@ select * from t where name='lisi';
 
 **是如何执行的呢？**
 
-![img](https://upload-images.jianshu.io/upload_images/4459024-a75e767d0198a6a4?imageMogr2/auto-orient/strip|imageView2/2/w/421/format/webp)
+![img](MarkDown_Sql.assets/4459024-a75e767d0198a6a4)
 
 如**粉红色**路径，需要扫码两遍索引树：
 
@@ -1020,7 +1648,7 @@ select id,name,sex ... where name='shenjian';
 
 **场景1：全表count查询优化**
 
-![img](https://upload-images.jianshu.io/upload_images/4459024-b8363020eca92a88?imageMogr2/auto-orient/strip|imageView2/2/w/986/format/webp)
+![img](MarkDown_Sql.assets/4459024-b8363020eca92a88)
 
 原表为：
 
@@ -1068,3 +1696,4 @@ select id,name,sex ... order by name limit 500,100;
 ```
 
 将单列索引(name)升级为联合索引(name, sex)，也可以避免回表。
+
