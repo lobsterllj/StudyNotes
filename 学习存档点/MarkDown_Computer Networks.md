@@ -243,9 +243,25 @@ HTTP / HTTPS
 
  
 
-![image-20210313001658266](MarkDown_Computer%20Networks.assets/image-20210313001658266-1615731945174.png)
+#### TCP有限状态机
+
+![img](MarkDown_Computer%20Networks.assets/20180608201426603)
+
+
+
+
+
+
+
+
+
+
+
+
 
 #### 三次握手
+
+![image-20210313001658266](MarkDown_Computer%20Networks.assets/image-20210313001658266-1615731945174.png)
 
 三次握手（Three-way Handshake）其实就是指建立一个TCP连接时，需要客户端和服务器总共发送3个包。进行三次握手的主要作用就是为了**确认双方的接收能力和发送能力是否正常**、指定自己的初始化序列号为后面的可靠性传送做准备。实质上其实就是连接服务器**指定端口，建立TCP连接，并同步连接双方的序列号和确认号，交换TCP窗口大小信息**。
 
