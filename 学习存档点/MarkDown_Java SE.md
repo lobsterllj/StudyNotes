@@ -98,7 +98,7 @@ Node是HashMap的一个内部类，实现了Map.Entry接口，本质是就是一
 
 在理解Hash和扩容流程之前，我们得先了解下HashMap的几个字段。从HashMap的默认构造函数源码可知，构造函数就是对下面几个字段进行初始化，源码如下：
 
-```
+```java
      int threshold;             // 所能容纳的key-value对极限 
      final float loadFactor;    // 负载因子
      int modCount;  
@@ -2538,7 +2538,7 @@ https://mp.weixin.qq.com/s?__biz=MzI4Njc5NjM1NQ%3D%3D&mid=2247495784&idx=1&sn=a3
 
 
 
-小demo：永远都不会输出**有点东西**这一段代码，按道理线程改了flag变量，主线程也能访问到的呀？为会出现这个情况呢？
+小demo：永远都不会输出**eh?**这一段代码，按道理线程改了flag变量，主线程也能访问到的呀？为会出现这个情况呢？
 
 ```java
 package Test;
@@ -2707,7 +2707,7 @@ volatile保证不同线程对共享变量操作的可见性，也就是说一个
 
 
 
-##### **禁止指令重排序**
+#### **禁止指令重排序**
 
 **什么是重排序?**
 
@@ -2731,7 +2731,7 @@ JMM对底层尽量减少约束，使其能够发挥自身优势。
 
 
 
-##### **那Volatile是怎么保证不会被执行重排序的呢？**
+#### **那Volatile是怎么保证不会被执行重排序的呢？**
 
 **内存屏障**
 
@@ -4049,7 +4049,7 @@ Field对象提供了getGenericType()方法获取到泛型变量。 上面的代�
 
 ### **动态代理**
 
-使用反射可以在运行时创建接口的动态实现，java.lang.reflect.Proxy类提供了创建动态实现的功能。我们把运行时创建接口的动态实现称为动态代理。
+使用反射可以在运行时创建接口的动态实现，java.lang.reflect.Proxy类提供了创建动态实现的功能。我们把**运行时创建接口的动态实现称为动态代理**。
 
 动态代理可以用于许多不同的目的，例如数据库连接和事务管理、用于单元测试的动态模拟对象以及其他类似aop的方法拦截等。
 
@@ -4057,8 +4057,13 @@ Field对象提供了getGenericType()方法获取到泛型变量。 上面的代�
 
 **创建代理**
 
-调用java.lang.reflect.Proxy类的newProxyInstance()方法就可以常见动态代理，newProxyInstance()方法有三个参数： 1、用于“加载”动态代理类的类加载器。
-2、要实现的接口数组。 3、将代理上的所有方法调用转发到InvocationHandler的对象。 代码如下：
+调用java.lang.reflect.Proxy类的newProxyInstance()方法就可以常见动态代理，newProxyInstance()方法有三个参数：
+
+1、用于“加载”动态代理类的类加载器。
+
+2、要实现的接口数组。 
+
+3、将代理上的所有方法调用转发到InvocationHandler的对象。 代码如下：
 
 ```java
 InvocationHandler handler = new MyInvocationHandler();
@@ -4371,7 +4376,7 @@ Exception（异常）:是程序本身可以处理的异常。Exception 类有一
 除了**RuntimeException以外的,都是checked Exception
 **
 
-java.lang.Object  java.lang.Throwable    java.lang.Exception 所有已实现的接口： Serializable 直接已知子类： AclNotFoundException, ActivationException, AlreadyBoundException, ApplicationException, AWTException, BackingStoreException, BadAttributeValueExpException, BadBinaryOpValueExpException, BadLocationException, BadStringOperationException, BrokenBarrierException, CertificateException, ClassNotFoundException, CloneNotSupportedException, DataFormatException, DatatypeConfigurationException, DestroyFailedException, ExecutionException, ExpandVetoException, FontFormatException, GeneralSecurityException, GSSException, IllegalAccessException, IllegalClassFormatException, InstantiationException, InterruptedException, IntrospectionException, InvalidApplicationException, InvalidMidiDataException, InvalidPreferencesFormatException, InvalidTargetObjectTypeException, InvocationTargetException, IOException, JAXBException, JMException, KeySelectorException, LastOwnerException, LineUnavailableException, MarshalException, MidiUnavailableException, MimeTypeParseException, MimeTypeParseException, NamingException, NoninvertibleTransformException, NoSuchFieldException, NoSuchMethodException, NotBoundException, NotOwnerException, ParseException, ParserConfigurationException, PrinterException, PrintException, PrivilegedActionException, PropertyVetoException, RefreshFailedException, RemarshalException, **RuntimeException**, SAXException, ScriptException, ServerNotActiveException, SOAPException, SQLException, TimeoutException, TooManyListenersException, TransformerException, TransformException, UnmodifiableClassException, UnsupportedAudioFileException, UnsupportedCallbackException, UnsupportedFlavorException, UnsupportedLookAndFeelException, URIReferenceException, URISyntaxException, UserException, XAException, XMLParseException, XMLSignatureException, XMLStreamException, XPathException 
+java.lang.Object  java.lang.Throwable    java.lang.Exception 所有已实现的接口： Serializable 直接已知子类： AclNotFoundException, ActivationException, AlreadyBoundException, ApplicationException, AWTException, BackingStoreException, BadAttributeValueExpException, BadBinaryOpValueExpException, BadLocationException, BadStringOperationException, BrokenBarrierException, CertificateException, **ClassNotFoundException**, CloneNotSupportedException, DataFormatException, DatatypeConfigurationException, DestroyFailedException, ExecutionException, ExpandVetoException, FontFormatException, GeneralSecurityException, GSSException, IllegalAccessException, IllegalClassFormatException, InstantiationException, **InterruptedException**, IntrospectionException, InvalidApplicationException, InvalidMidiDataException, InvalidPreferencesFormatException, InvalidTargetObjectTypeException, InvocationTargetException, **IOException**, JAXBException, JMException, KeySelectorException, LastOwnerException, LineUnavailableException, MarshalException, MidiUnavailableException, MimeTypeParseException, MimeTypeParseException, NamingException, NoninvertibleTransformException, NoSuchFieldException, NoSuchMethodException, NotBoundException, NotOwnerException, ParseException, ParserConfigurationException, PrinterException, PrintException, PrivilegedActionException, PropertyVetoException, RefreshFailedException, RemarshalException, **RuntimeException**, SAXException, ScriptException, ServerNotActiveException, SOAPException, SQLException, TimeoutException, TooManyListenersException, TransformerException, TransformException, UnmodifiableClassException, UnsupportedAudioFileException, UnsupportedCallbackException, UnsupportedFlavorException, UnsupportedLookAndFeelException, URIReferenceException, URISyntaxException, UserException, XAException, XMLParseException, XMLSignatureException, XMLStreamException, XPathException 
 
 
 
@@ -4706,6 +4711,151 @@ public class TestEnum {
 
 #### **BIO、NIO、AIO 有什么区别？**
 
+8分钟深入浅出搞懂BIO、NIO、AIO - 优知学院的文章 - 知乎 https://zhuanlan.zhihu.com/p/83597838
+
+
+
+##### **1.BIO (同步阻塞I/O模式)**
+
+数据的读取写入必须阻塞在一个线程内等待其完成。
+
+这里使用那个经典的烧开水例子，这里假设一个烧开水的场景，有一排水壶在烧开水，BIO的工作模式就是， 叫一个线程停留在一个水壶那，直到这个水壶烧开，才去处理下一个水壶。但是实际上线程在等待水壶烧开的时间段什么都没有做。
+
+
+
+##### **2.NIO（同步非阻塞）**
+
+同时支持阻塞与非阻塞模式，但这里我们以其同步非阻塞I/O模式来说明，那么什么叫做同步非阻塞？如果还拿烧开水来说，NIO的做法是叫一个线程不断的轮询每个水壶的状态，看看是否有水壶的状态发生了改变，从而进行下一步的操作。
+
+
+
+##### **3.AIO （异步非阻塞I/O模型）**
+
+异步非阻塞与同步非阻塞的区别在哪里？异步非阻塞无需一个线程去轮询所有IO操作的状态改变，在相应的状态改变后，系统会通知对应的线程来处理。对应到烧开水中就是，为每个水壶上面装了一个开关，水烧开之后，水壶会自动通知我水烧开了。
+
+
+
+##### **4.IO与NIO区别**
+
+
+
+![img](MarkDown_Java%20SE.assets/v2-4240c9fd3182be3c5ef8af4f29948486_1440w.jpg)
+
+
+
+
+
+##### **5.同步与异步的区别**
+
+- 同步
+
+发送一个请求，等待返回，再发送下一个请求，同步可以避免出现死锁，脏读的发生。
+
+- 异步
+
+发送一个请求，不等待返回，随时可以再发送下一个请求，可以提高效率，保证并发
+
+
+
+
+
+##### **6.阻塞和非阻塞**
+
+- **阻塞**
+
+传统的IO流都是阻塞式的。也就是说，当一个线程调用read()或者write()方法时，该线程将被阻塞，直到有一些数据读读取或者被写入，在此期间，**该线程不能执行其他任何任务**。在完成网络通信进行IO操作时，由于线程会阻塞，所以服务器端必须为每个客户端都提供一个独立的线程进行处理，当服务器端需要处理大量的客户端时，性能急剧下降。
+
+- **非阻塞**
+
+JavaNIO是非阻塞式的。当线程从**某通道进行读写数据时，若没有数据可用时，该线程会去执行其他任务**。线程通常将非阻塞IO的空闲时间用于在其他通道上执行IO操作，所以**单独的线程可以管理多个输入和输出通道**。因此NIO可以让服务器端使用一个或有限几个线程来同时处理连接到服务器端的所有客户端。
+
+
+
+
+
+##### **7.BIO、NIO、AIO适用场景**
+
+- BIO方式适用于连接数目比较小且固定的架构，这种方式对服务器资源要求比较高，并发局限于应用中，JDK1.4以前的唯一选择。
+- NIO方式适用于连接数目多且连接比较短（轻操作）的架构，比如聊天服务器，并发局限于应用中，编程比较复杂。
+- AIO方式使用于连接数目多且连接比较长（重操作）的架构，比如相册服务器，充分调用OS参与并发操作，编程比较复杂，JDK7开始支持。
+
+
+
+
+
+##### NIO的3个核心概念
+
+NIO重点是把Channel（通道），Buffer（缓冲区），Selector（选择器）三个类之间的关系弄清楚。
+
+##### **1.缓冲区Buffer**
+
+Buffer是一个对象。它包含一些要写入或者读出的数据。在面向流的I/O中，可以将数据写入或者将数据直接读到Stream对象中。
+
+在NIO中，所有的数据都是用缓冲区处理。这也就本文上面谈到的IO是面向流的，NIO是面向缓冲区的。
+
+缓冲区实质是一个数组，通常它是一个字节数组（ByteBuffer），也可以使用其他类的数组。但是一个缓冲区不仅仅是一个数组，缓冲区提供了对数据的结构化访问以及维护读写位置（limit）等信息。
+
+最常用的缓冲区是ByteBuffer，一个ByteBuffer提供了一组功能于操作byte数组。除了ByteBuffer，还有其他的一些缓冲区，事实上，每一种Java基本类型（除了Boolean）都对应一种缓冲区，具体如下：
+
+- ByteBuffer：字节缓冲区
+- CharBuffer:字符缓冲区
+- ShortBuffer：短整型缓冲区
+- IntBuffer：整型缓冲区
+- LongBuffer:长整型缓冲区
+- FloatBuffer：浮点型缓冲区
+- DoubleBuffer：双精度浮点型缓冲区
+
+##### **2.通道Channel**
+
+**Channel是一个通道，可以通过它读取和写入数据**，他就像自来水管一样，网络数据通过Channel读取和写入。
+
+通道和流不同之处在于通道是双向的，流只是在一个方向移动，而且通道可以用于读，写或者同时用于读写。
+
+因为**Channel是全双工的**，所以它比流更好地映射底层操作系统的API，特别是在UNIX网络编程中，底层操作系统的通道都是全双工的，**同时支持读和写**。
+
+Channel有四种实现：
+
+- FileChannel:是从文件中读取数据。
+- DatagramChannel:从UDP网络中读取或者写入数据。
+- SocketChannel:从TCP网络中读取或者写入数据。
+- ServerSocketChannel:允许你监听来自TCP的连接，就像服务器一样。每一个连接都会有一个SocketChannel产生。
+
+
+
+##### **3.多路复用器Selector**
+
+Selector选择器可以监听多个Channel通道感兴趣的事情(read、write、accept(服务端接收)、connect，实现一个线程管理多个Channel，节省线程切换上下文的资源消耗。Selector只能管理非阻塞的通道，FileChannel是阻塞的，无法管理。
+
+**关键对象**
+
+- Selector：选择器对象，通道注册、通道监听对象和Selector相关。
+- SelectorKey：通道监听关键字，通过它来监听通道状态。
+
+**监听注册**
+
+监听注册在Selector
+
+> socketChannel.register(selector, SelectionKey.OP_READ);
+
+
+
+**监听的事件有**
+
+- OP_ACCEPT: 接收就绪，serviceSocketChannel使用的
+- OP_READ: 读取就绪，socketChannel使用
+- OP_WRITE: 写入就绪，socketChannel使用
+- OP_CONNECT: 连接就绪，socketChannel使用
+
+
+
+
+
+
+
+
+
+##### 小demo
+
 ```java
 //TODO:待完善
 ```
@@ -4716,7 +4866,7 @@ https://blog.csdn.net/qq_18297675/article/details/100628025
 - NIO：New IO 同步非阻塞 IO，是传统 IO 的升级，客户端和服务器端通过 Channel（通道）通讯，实现了多路复用。
 - AIO：Asynchronous IO 是 NIO 的升级，也叫 NIO2，实现了异步非堵塞 IO ，异步 IO 的操作基于事件和回调机制。
 
-##### BIO
+###### BIO
 
 BIOserver
 
@@ -4756,9 +4906,6 @@ public class BIOserver {
             out.write(buf, 0, len);
         }
     }
-
-
-
 }
 ```
 
@@ -4805,7 +4952,7 @@ public class BIOclient {
 
 
 
-##### NIO
+###### NIO
 
 Buffer概念
 缓冲区，它的内存分配有两种实现，第一种是jvm堆内存分配缓冲区大小，第二种是直接内存分配缓冲区大小。这两种的详细区别，这里不好展开讲，简单说呢，使用jvm堆内存做缓冲区，易于垃圾回收，速度比直接内存更快，但是将数据拷贝到内核空间却需要两次，第一次是拷贝到对外内存，对外内存再到内核空间。如图
@@ -5403,17 +5550,119 @@ buffer.read(buf);
 
 ## 设计模式
 
-#### 
+如何学习设计模式？ - 力扣（LeetCode）的回答 - 知乎 https://www.zhihu.com/question/308850392/answer/1324509357
+
+![image-20210419231211028](MarkDown_Java%20SE.assets/image-20210419231211028.png)
+
+
+
+
+
+### 单例模式
+
+#### 饿汉式
+
+final类变量
 
 ```java
-//TODO:
+public class Singleton {
+    private static final Singleton singleton = new Singleton();
+
+    private Singleton(){}
+
+    public static Singleton getInstance() {
+        return singleton;
+    }
+}
+```
+
+
+
+枚举
+
+```java
+public enum SingletonEnum {
+    INSTANCE;
+}
+```
+
+
+
+#### 懒汉式
+
+双重锁检测
+
+```java
+public class Singleton {
+    
+    private static volatile Singleton singleton;
+    
+    private Singleton(){}
+    
+    public static Singleton getInstance() {
+        if (singleton == null) {  // 线程A和线程B同时看到singleton = null，如果不为null，则直接返回singleton
+            synchronized(Singleton.class) { // 线程A或线程B获得该锁进行初始化
+                if (singleton == null) { // 其中一个线程进入该分支，另外一个线程则不会进入该分支
+                    singleton = new Singleton();
+                }
+            }
+        }
+        return singleton;
+    }
+    
+}
+```
+
+
+
+匿名内部类
+
+```java
+public class staticInner {
+
+    private static class LazyHolder {
+        private static final staticInner INSTANCE = new staticInner();
+    }
+
+    private staticInner() {
+    }
+
+    public static staticInner getInstance() {
+        return LazyHolder.INSTANCE;
+    }
+
+}
 ```
 
 
 
 
 
-单例模式
+利用发射打破单例模式
+
+```java
+//获得构造器
+Constructor con = Singleton.class.getDeclaredConstructor();
+//设置为可访问
+con.setAccessible(true);
+//构造两个不同的对象
+Singleton singleton1 = (Singleton)con.newInstance();
+Singleton singleton2 = (Singleton)con.newInstance();
+//验证是否是不同对象
+System.out.println(singleton1.equals(singleton2));
+```
+
+
+
+#### 总结
+
+
+
+![img](MarkDown_Java%20SE.assets/v2-cd8485a2a815ee615d5857a98702e8f0_1440w.jpg)
+
+
+
+补充：final类变量虽然是饿汉加载，依旧无法防止反射构建
 
 
 
@@ -8917,21 +9166,9 @@ class ExtendedExecutor extends ThreadPoolExecutor {
 
 ##### **线程池都有哪几种工作队列？**
 
-- ArrayBlockingQueue
 
-- LinkedBlockingQueue
 
-- DelayQueue
-
-- PriorityBlockingQueue
-
-- SynchronousQueue
-
-  
-  
-  
-  
-  ![img](MarkDown_Java%20SE.assets/v2-2a502a31771713d4f631034485b8b796_1440w.jpg)
+![img](MarkDown_Java%20SE.assets/v2-2a502a31771713d4f631034485b8b796_1440w.jpg)
 
 
 
